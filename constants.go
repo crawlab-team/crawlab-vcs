@@ -14,3 +14,10 @@ const (
 	GitAuthTypeHTTP
 	GitAuthTypeSSH
 )
+
+type GitInitType int
+
+const (
+	GitInitTypeFs GitInitType = iota
+	GitInitTypeMem
+)

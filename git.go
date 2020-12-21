@@ -8,11 +8,13 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/go-git/go-git/v5/storage/memory"
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -22,8 +24,10 @@ type GitClient struct {
 }
 
 type GitOptions struct {
+	Path           string
 	RemoteUrl      string
 	IsBare         bool
+	IsMem          bool
 	AuthType       GitAuthType
 	Username       string
 	Password       string
@@ -39,15 +43,19 @@ type GitLog struct {
 }
 
 var DefaultGitOptions = GitOptions{
+	Path:           "",
 	RemoteUrl:      "",
 	IsBare:         false,
+	IsMem:          false,
 	AuthType:       GitAuthTypeNone,
 	Username:       "",
 	Password:       "",
 	PrivateKeyPath: getDefaultPublicKeyPath(),
 }
 
-func NewGitClient(path string, options *GitOptions) (c *GitClient, err error) {
+var GitMemStorages = sync.Map{}
+
+func NewGitClient(options *GitOptions) (c *GitClient, err error) {
 	if options == nil {
 		options = &DefaultGitOptions
 	}
@@ -57,7 +65,7 @@ func NewGitClient(path string, options *GitOptions) (c *GitClient, err error) {
 	c = &GitClient{
 		opts: options,
 	}
-	if err := c.Init(path, options.IsBare); err != nil {
+	if err := c.Init(options.IsBare); err != nil {
 		return c, err
 	}
 	return
@@ -146,6 +154,7 @@ func getGitAuth(authType GitAuthType, username, password, privateKeyPath string)
 	}
 	return
 }
+
 func getDefaultPublicKeyPath() (path string) {
 	u, err := user.Current()
 	if err != nil {
@@ -155,39 +164,24 @@ func getDefaultPublicKeyPath() (path string) {
 	return
 }
 
-func (c *GitClient) Init(path string, args ...interface{}) (err error) {
-	// get absolute path
-	path, err = filepath.Abs(path)
+func (c *GitClient) Init(args ...interface{}) (err error) {
+	initType := c.GetInitType()
+	switch initType {
+	case GitInitTypeFs:
+		err = c.InitFs()
+	case GitInitTypeMem:
+		err = c.InitMem()
+	}
 	if err != nil {
 		return err
-	}
-
-	// if path does not exist, create new directory
-	_, err = os.Stat(path)
-	if err != nil {
-		if err := os.MkdirAll(path, os.ModePerm); err != nil {
-			return err
-		}
-	}
-
-	// check if .git exists
-	if _, err := os.Stat(filepath.Join(path, git.GitDirName)); err != nil {
-		// .git does not exist, init
-		c.r, err = git.PlainInit(path, c.opts.IsBare)
-		if err != nil {
-			return err
-		}
-	} else {
-		// .git exists, open
-		c.r, err = git.PlainOpen(path)
-		if err != nil {
-			return err
-		}
 	}
 
 	// if not bare and remote url is not empty and no remote exists
 	// create default remote and pull from remote url
 	remotes, err := c.r.Remotes()
+	if err != nil {
+		return err
+	}
 	if !c.opts.IsBare && c.opts.RemoteUrl != "" && len(remotes) == 0 {
 		// attempt to get default remote
 		if _, err := c.r.Remote(GitRemoteNameOrigin); err != nil {
@@ -208,6 +202,68 @@ func (c *GitClient) Init(path string, args ...interface{}) (err error) {
 	}
 
 	return nil
+}
+
+func (c *GitClient) InitMem() (err error) {
+	if !c.opts.IsMem || c.opts.Path == "" {
+		return ErrInvalidOptions
+	}
+	storage, err := c.GetMemStorage(c.opts.Path)
+	if err != nil {
+		return err
+	}
+	c.r, err = git.Init(storage, nil)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *GitClient) InitFs() (err error) {
+	// validate options
+	if c.opts.Path == "" {
+		return ErrInvalidOptions
+	}
+
+	// get path
+	path := c.opts.Path
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+
+	// create directory if not exists
+	_, err = os.Stat(path)
+	if err != nil {
+		if err := os.MkdirAll(path, os.ModePerm); err != nil {
+			return err
+		}
+	}
+
+	// check if .git exists
+	if _, err := os.Stat(filepath.Join(path, git.GitDirName)); err != nil {
+		// .git not exists, init
+		c.r, err = git.PlainInit(path, c.opts.IsBare)
+		if err != nil {
+			return err
+		}
+	} else {
+		// .git exists, open
+		c.r, err = git.PlainOpen(path)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *GitClient) GetInitType() (res GitInitType) {
+	if c.opts.IsMem {
+		return GitInitTypeMem
+	} else {
+		return GitInitTypeFs
+	}
 }
 
 func (c *GitClient) Checkout(args ...interface{}) (err error) {
@@ -479,4 +535,21 @@ func (c *GitClient) GetLogs() (logs []GitLog, err error) {
 		return logs, err
 	}
 	return
+}
+
+func (c *GitClient) GetMemStorage(key string) (storage *memory.Storage, err error) {
+	item, ok := GitMemStorages.Load(key)
+	if !ok {
+		storage = memory.NewStorage()
+		GitMemStorages.Store(key, storage)
+	} else {
+		switch item.(type) {
+		case *memory.Storage:
+			storage = item.(*memory.Storage)
+		default:
+			storage = memory.NewStorage()
+			GitMemStorages.Store(key, storage)
+		}
+	}
+	return storage, nil
 }

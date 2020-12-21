@@ -47,7 +47,8 @@ func TestNewGitClient(t *testing.T) {
 	require.Nil(t, err)
 
 	// test with options
-	c, err := NewGitClient("./tmp/test_repo", &GitOptions{
+	c, err := NewGitClient(&GitOptions{
+		Path:      "./tmp/test_repo",
 		RemoteUrl: "test_url",
 		IsBare:    true,
 	})
@@ -56,13 +57,6 @@ func TestNewGitClient(t *testing.T) {
 	require.NotEmpty(t, c.opts)
 	require.Equal(t, "test_url", c.opts.RemoteUrl)
 	require.True(t, c.opts.IsBare)
-
-	// test without options
-	c, err = NewGitClient("./tmp/test_repo_no_options", nil)
-	require.Nil(t, err)
-	require.NotEmpty(t, c.r)
-	require.Empty(t, c.opts.RemoteUrl)
-	require.False(t, c.opts.IsBare)
 
 	// cleanup
 	err = cleanup()
@@ -75,14 +69,19 @@ func TestGitClient_Init(t *testing.T) {
 	require.Nil(t, err)
 
 	// test not bare
-	c, err := NewGitClient("./tmp/test_repo", nil)
+	c, err := NewGitClient(&GitOptions{
+		Path:      "./tmp/test_repo",
+		RemoteUrl: "test_url",
+		IsBare:    true,
+	})
 	require.Nil(t, err)
 	require.NotEmpty(t, c.r)
 	require.DirExists(t, "./tmp/test_repo")
 	require.DirExists(t, "./tmp/test_repo/.git")
 
 	// test bare
-	c, err = NewGitClient("./tmp/test_repo_bare", &GitOptions{
+	c, err = NewGitClient(&GitOptions{
+		Path:   "./tmp/test_repo_bare",
 		IsBare: true,
 	})
 	require.Nil(t, err)
@@ -93,14 +92,17 @@ func TestGitClient_Init(t *testing.T) {
 	require.Greater(t, len(files), 0)
 
 	// test existing
-	c, err = NewGitClient("./tmp/test_repo", nil)
+	c, err = NewGitClient(&GitOptions{
+		Path: "./tmp/test_repo",
+	})
 	require.Nil(t, err)
 	require.NotEmpty(t, c.r)
 
 	// test remote exists
 	remotePath, err := filepath.Abs("./tmp/test_repo_bare")
 	require.Nil(t, err)
-	c, err = NewGitClient("./tmp/test_repo_with_remote", &GitOptions{
+	c, err = NewGitClient(&GitOptions{
+		Path:      "./tmp/test_repo_with_remote",
 		RemoteUrl: remotePath,
 		IsBare:    false,
 	})
@@ -121,7 +123,9 @@ func TestGitClient_CheckoutBranch(t *testing.T) {
 	require.Nil(t, err)
 
 	// create new git client
-	c, err := NewGitClient("./tmp/test_repo", nil)
+	c, err := NewGitClient(&GitOptions{
+		Path: "./tmp/test_repo",
+	})
 	require.Nil(t, err)
 
 	// test commit files
@@ -180,7 +184,9 @@ func TestGitClient_CommitAll(t *testing.T) {
 	require.Nil(t, err)
 
 	// create new git client
-	c, err := NewGitClient("./tmp/test_repo", nil)
+	c, err := NewGitClient(&GitOptions{
+		Path: "./tmp/test_repo",
+	})
 	require.Nil(t, err)
 
 	// test commit files
@@ -201,7 +207,8 @@ func TestGitClient_PushAndPullAndClone(t *testing.T) {
 	require.Nil(t, err)
 
 	// create a remote repo
-	c, err := NewGitClient("./tmp/test_repo_remote", &GitOptions{
+	c, err := NewGitClient(&GitOptions{
+		Path:   "./tmp/test_repo_remote",
 		IsBare: true,
 	})
 	require.Nil(t, err)
@@ -209,9 +216,9 @@ func TestGitClient_PushAndPullAndClone(t *testing.T) {
 	// create a local repo
 	remotePath, err := filepath.Abs("./tmp/test_repo_remote")
 	require.Nil(t, err)
-	c, err = NewGitClient("./tmp/test_repo_local", &GitOptions{
-		RemoteUrl: remotePath,
-		IsBare:    false,
+	c, err = NewGitClient(&GitOptions{
+		Path:   "./tmp/test_repo_local",
+		IsBare: false,
 	})
 	require.Nil(t, err)
 
@@ -223,7 +230,8 @@ func TestGitClient_PushAndPullAndClone(t *testing.T) {
 	require.Nil(t, err)
 
 	// create a second git client
-	c2, err := NewGitClient("./tmp/test_repo_pull", &GitOptions{
+	c2, err := NewGitClient(&GitOptions{
+		Path:      "./tmp/test_repo_pull",
 		RemoteUrl: remotePath,
 		IsBare:    false,
 	})
@@ -251,7 +259,9 @@ func TestGitClient_Reset(t *testing.T) {
 	require.Nil(t, err)
 
 	// create new git client
-	c, err := NewGitClient("./tmp/test_repo", nil)
+	c, err := NewGitClient(&GitOptions{
+		Path: "./tmp/test_repo",
+	})
 	require.Nil(t, err)
 
 	// test reset
@@ -278,7 +288,9 @@ func TestGitClient_GetLogs(t *testing.T) {
 	require.Nil(t, err)
 
 	// create new git client
-	c, err := NewGitClient("./tmp/test_repo", nil)
+	c, err := NewGitClient(&GitOptions{
+		Path: "./tmp/test_repo",
+	})
 	require.Nil(t, err)
 
 	// test commit files
@@ -309,7 +321,8 @@ func TestGitClient_InitWithHttpAuth(t *testing.T) {
 	require.Nil(t, err)
 
 	// create new git client
-	c, err := NewGitClient("./tmp/test_repo", &GitOptions{
+	c, err := NewGitClient(&GitOptions{
+		Path:      "./tmp/test_repo",
 		RemoteUrl: cred.TestRepoHttpUrl,
 		IsBare:    false,
 		AuthType:  GitAuthTypeHTTP,
@@ -343,7 +356,8 @@ func TestGitClient_InitWithSshAuth(t *testing.T) {
 	require.Nil(t, err)
 
 	// create new git client
-	c, err := NewGitClient("./tmp/test_repo", &GitOptions{
+	c, err := NewGitClient(&GitOptions{
+		Path:      "./tmp/test_repo",
 		RemoteUrl: cred.TestRepoSshUrl,
 		IsBare:    false,
 		AuthType:  GitAuthTypeSSH,
