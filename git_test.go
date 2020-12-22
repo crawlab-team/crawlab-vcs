@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -40,6 +41,8 @@ func cleanup() (err error) {
 	if err == nil {
 		err = os.RemoveAll("./tmp")
 	}
+	GitMemStorages = sync.Map{}
+	GitMemFileSystem = sync.Map{}
 	return
 }
 
