@@ -7,4 +7,5 @@ type Client interface {
 	Pull(args ...interface{}) (err error)
 	Push(args ...interface{}) (err error)
 	Reset(args ...interface{}) (err error)
+	Dispose(args ...interface{}) (err error)
 }

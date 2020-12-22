@@ -1,6 +1,8 @@
 package vcs
 
 import (
+	"github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -54,6 +56,7 @@ var DefaultGitOptions = GitOptions{
 }
 
 var GitMemStorages = sync.Map{}
+var GitMemFileSystem = sync.Map{}
 
 func NewGitClient(options *GitOptions) (c *GitClient, err error) {
 	if options == nil {
@@ -205,17 +208,31 @@ func (c *GitClient) Init(args ...interface{}) (err error) {
 }
 
 func (c *GitClient) InitMem() (err error) {
+	// validate options
 	if !c.opts.IsMem || c.opts.Path == "" {
 		return ErrInvalidOptions
 	}
-	storage, err := c.GetMemStorage(c.opts.Path)
+
+	// get storage and worktree
+	storage, wt, err := c.GetMemStorageAndMemFs(c.opts.Path)
 	if err != nil {
 		return err
 	}
-	c.r, err = git.Init(storage, nil)
+
+	// attempt to init
+	c.r, err = git.Init(storage, wt)
 	if err != nil {
-		return err
+		if err == git.ErrRepositoryAlreadyExists {
+			// if already exists, attempt to open
+			c.r, err = git.Open(storage, wt)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
+
 	return nil
 }
 
@@ -500,6 +517,23 @@ func (c *GitClient) Reset(args ...interface{}) (err error) {
 	return nil
 }
 
+func (c *GitClient) Dispose(args ...interface{}) (err error) {
+	switch c.GetInitType() {
+	case GitInitTypeFs:
+		path, err := filepath.Abs(c.opts.Path)
+		if err != nil {
+			return err
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+	case GitInitTypeMem:
+		GitMemStorages.Delete(c.opts.Path)
+		GitMemFileSystem.Delete(c.opts.Path)
+	}
+	return nil
+}
+
 func (c *GitClient) CreateRemote(remoteName string, url string) (err error) {
 	if c.opts.IsBare {
 		return ErrInvalidActionsForBareRepo
@@ -537,19 +571,36 @@ func (c *GitClient) GetLogs() (logs []GitLog, err error) {
 	return
 }
 
-func (c *GitClient) GetMemStorage(key string) (storage *memory.Storage, err error) {
-	item, ok := GitMemStorages.Load(key)
+func (c *GitClient) GetMemStorageAndMemFs(key string) (storage *memory.Storage, fs billy.Filesystem, err error) {
+	// storage
+	storageItem, ok := GitMemStorages.Load(key)
 	if !ok {
 		storage = memory.NewStorage()
 		GitMemStorages.Store(key, storage)
 	} else {
-		switch item.(type) {
+		switch storageItem.(type) {
 		case *memory.Storage:
-			storage = item.(*memory.Storage)
+			storage = storageItem.(*memory.Storage)
 		default:
 			storage = memory.NewStorage()
 			GitMemStorages.Store(key, storage)
 		}
 	}
-	return storage, nil
+
+	// file system
+	fsItem, ok := GitMemFileSystem.Load(key)
+	if !ok {
+		fs = memfs.New()
+		GitMemFileSystem.Store(key, fs)
+	} else {
+		switch fsItem.(type) {
+		case billy.Filesystem:
+			fs = fsItem.(billy.Filesystem)
+		default:
+			fs = memfs.New()
+			GitMemFileSystem.Store(key, fs)
+		}
+	}
+
+	return storage, fs, nil
 }

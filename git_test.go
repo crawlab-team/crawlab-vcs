@@ -3,8 +3,10 @@ package vcs
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"os"
@@ -68,18 +70,17 @@ func TestGitClient_Init(t *testing.T) {
 	err := setup()
 	require.Nil(t, err)
 
-	// test not bare
+	// test not bare (fs)
 	c, err := NewGitClient(&GitOptions{
-		Path:      "./tmp/test_repo",
-		RemoteUrl: "test_url",
-		IsBare:    true,
+		Path:   "./tmp/test_repo",
+		IsBare: false,
 	})
 	require.Nil(t, err)
 	require.NotEmpty(t, c.r)
 	require.DirExists(t, "./tmp/test_repo")
 	require.DirExists(t, "./tmp/test_repo/.git")
 
-	// test bare
+	// test bare (fs)
 	c, err = NewGitClient(&GitOptions{
 		Path:   "./tmp/test_repo_bare",
 		IsBare: true,
@@ -91,14 +92,14 @@ func TestGitClient_Init(t *testing.T) {
 	require.Nil(t, err)
 	require.Greater(t, len(files), 0)
 
-	// test existing
+	// test existing (fs)
 	c, err = NewGitClient(&GitOptions{
 		Path: "./tmp/test_repo",
 	})
 	require.Nil(t, err)
 	require.NotEmpty(t, c.r)
 
-	// test remote exists
+	// test remote exists (fs)
 	remotePath, err := filepath.Abs("./tmp/test_repo_bare")
 	require.Nil(t, err)
 	c, err = NewGitClient(&GitOptions{
@@ -111,6 +112,22 @@ func TestGitClient_Init(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, remote)
 	require.Equal(t, GitRemoteNameOrigin, remote.Config().Name)
+
+	// test new (mem)
+	c, err = NewGitClient(&GitOptions{
+		Path:      "./tmp/test_repo_mem",
+		IsMem:     true,
+		RemoteUrl: remotePath,
+	})
+	require.Nil(t, err)
+
+	// test existing (mem)
+	c, err = NewGitClient(&GitOptions{
+		Path:      "./tmp/test_repo_mem",
+		IsMem:     true,
+		RemoteUrl: remotePath,
+	})
+	require.Nil(t, err)
 
 	// cleanup
 	err = cleanup()
@@ -213,23 +230,24 @@ func TestGitClient_PushAndPullAndClone(t *testing.T) {
 	})
 	require.Nil(t, err)
 
-	// create a local repo
+	// create a local repo (fs)
 	remotePath, err := filepath.Abs("./tmp/test_repo_remote")
 	require.Nil(t, err)
 	c, err = NewGitClient(&GitOptions{
-		Path:   "./tmp/test_repo_local",
-		IsBare: false,
+		Path:      "./tmp/test_repo_local",
+		RemoteUrl: remotePath,
+		IsBare:    false,
 	})
 	require.Nil(t, err)
 
-	// test commit files
+	// test commit files (fs)
 	content := "it works"
 	err = ioutil.WriteFile("./tmp/test_repo_local/test_file.txt", []byte(content), os.ModePerm)
 	require.Nil(t, err)
 	err = c.CommitAll("initial commit")
 	require.Nil(t, err)
 
-	// create a second git client
+	// create a second git client (fs)
 	c2, err := NewGitClient(&GitOptions{
 		Path:      "./tmp/test_repo_pull",
 		RemoteUrl: remotePath,
@@ -237,14 +255,32 @@ func TestGitClient_PushAndPullAndClone(t *testing.T) {
 	})
 	require.Nil(t, err)
 
-	// push to remote
+	// push to remote (fs)
 	err = c.Push(nil)
 	require.Nil(t, err)
 
-	// pull to the second git client
+	// pull to the second git client (fs)
 	err = c2.Pull(nil)
 	require.Nil(t, err)
 	data, err := ioutil.ReadFile("./tmp/test_repo_pull/test_file.txt")
+	require.Nil(t, err)
+	require.Equal(t, content, string(data))
+
+	// create a third git client (mem)
+	c3, err := NewGitClient(&GitOptions{
+		Path:      "./tmp/test_repo_mem",
+		RemoteUrl: remotePath,
+		IsMem:     true,
+		IsBare:    false,
+	})
+	require.Nil(t, err)
+	wt, err := c3.r.Worktree()
+	require.Nil(t, err)
+	_, err = wt.Filesystem.Stat("./test_file.txt")
+	require.Nil(t, err)
+	file, err := wt.Filesystem.Open("./test_file.txt")
+	require.Nil(t, err)
+	data, err = ioutil.ReadAll(file)
 	require.Nil(t, err)
 	require.Equal(t, content, string(data))
 
@@ -372,6 +408,54 @@ func TestGitClient_InitWithSshAuth(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, string(data), "Test Repo")
 	fmt.Println(string(data))
+
+	// cleanup
+	err = cleanup()
+	require.Nil(t, err)
+}
+
+func TestGitClient_Dispose(t *testing.T) {
+	// setup
+	err := setup()
+	require.Nil(t, err)
+
+	// create new git client (fs)
+	c, err := NewGitClient(&GitOptions{
+		Path: "./tmp/test_repo",
+	})
+	require.Nil(t, err)
+
+	// test path exists (fs)
+	require.DirExists(t, "./tmp/test_repo")
+
+	// dispose (fs)
+	err = c.Dispose()
+	require.Nil(t, err)
+	_, err = os.Stat("./tmp/test_repo")
+	require.NotNil(t, err)
+
+	// create new git client (mem)
+	c, err = NewGitClient(&GitOptions{
+		Path:  "./tmp/test_repo",
+		IsMem: true,
+	})
+	require.Nil(t, err)
+
+	// test mem map exists
+	stItem, ok := GitMemStorages.Load("./tmp/test_repo")
+	require.True(t, ok)
+	require.IsType(t, &memory.Storage{}, stItem)
+	fsItem, ok := GitMemFileSystem.Load("./tmp/test_repo")
+	require.True(t, ok)
+	require.IsType(t, memfs.New(), fsItem)
+
+	// dispose (mem)
+	err = c.Dispose()
+	require.Nil(t, err)
+	_, ok = GitMemStorages.Load("./tmp/test_repo")
+	require.False(t, ok)
+	_, ok = GitMemFileSystem.Load("./tmp/test_repo")
+	require.False(t, ok)
 
 	// cleanup
 	err = cleanup()
