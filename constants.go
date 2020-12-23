@@ -7,6 +7,15 @@ const (
 )
 const GitDefaultRemoteName = GitRemoteNameOrigin
 
+const (
+	GitBranchNameMaster  = "master"
+	GitBranchNameMain    = "main"
+	GitBranchNameRelease = "release"
+	GitBranchNameTest    = "test"
+	GitBranchNameDevelop = "develop"
+)
+const GitDefaultBranchName = GitBranchNameMaster
+
 type GitAuthType int
 
 const (

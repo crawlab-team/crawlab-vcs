@@ -336,12 +336,11 @@ func (c *GitClient) CheckoutBranch(branch string, args ...interface{}) (err erro
 				return err
 			}
 			headRef, err := c.r.Head()
-			if err != nil {
-				return err
-			}
-			ref := plumbing.NewHashReference(plumbing.NewBranchReferenceName(branch), headRef.Hash())
-			if err := c.r.Storer.SetReference(ref); err != nil {
-				return err
+			if err == nil {
+				ref := plumbing.NewHashReference(plumbing.NewBranchReferenceName(branch), headRef.Hash())
+				if err := c.r.Storer.SetReference(ref); err != nil {
+					return err
+				}
 			}
 		} else {
 			return err
