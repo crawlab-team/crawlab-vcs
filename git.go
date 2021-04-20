@@ -191,6 +191,7 @@ func (c *GitClient) Init(args ...interface{}) (err error) {
 			if err != git.ErrRemoteNotFound {
 				return err
 			}
+			err = nil
 
 			// create default remote
 			if err := c.CreateRemote(GitRemoteNameOrigin, c.opts.RemoteUrl); err != nil {
