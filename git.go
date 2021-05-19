@@ -25,6 +25,7 @@ type GitClient struct {
 	authType       GitAuthType
 	username       string
 	password       string
+	privateKey     string
 	privateKeyPath string
 
 	// internals
@@ -142,7 +143,7 @@ func (c *GitClient) Pull(opts ...GitPullOption) (err error) {
 	}
 
 	// auth
-	auth, err := c.getGitAuth(c.authType, c.username, c.password, c.privateKeyPath)
+	auth, err := c.getGitAuth()
 	if err != nil {
 		return err
 	}
@@ -172,7 +173,7 @@ func (c *GitClient) Pull(opts ...GitPullOption) (err error) {
 
 func (c *GitClient) Push(opts ...GitPushOption) (err error) {
 	// auth
-	auth, err := c.getGitAuth(c.authType, c.username, c.password, c.privateKeyPath)
+	auth, err := c.getGitAuth()
 	if err != nil {
 		return err
 	}
@@ -458,23 +459,34 @@ func (c *GitClient) getResetMode(mode interface{}) (res git.ResetMode, err error
 	return git.MixedReset, ErrUnsupportedType
 }
 
-func (c *GitClient) getGitAuth(authType GitAuthType, username, password, privateKeyPath string) (auth transport.AuthMethod, err error) {
-	switch authType {
+func (c *GitClient) getGitAuth() (auth transport.AuthMethod, err error) {
+	switch c.authType {
 	case GitAuthTypeNone:
-		auth = nil
+		return nil, nil
 	case GitAuthTypeHTTP:
 		auth = &http.BasicAuth{
-			Username: username,
-			Password: password,
+			Username: c.username,
+			Password: c.password,
 		}
+		return auth, nil
 	case GitAuthTypeSSH:
-		privateKeyData, err := ioutil.ReadFile(privateKeyPath)
-		if err != nil {
-			return nil, err
+		var privateKeyData []byte
+		if c.privateKey != "" {
+			// private key content
+			privateKeyData = []byte(c.privateKey)
+		} else if c.privateKeyPath != "" {
+			// read from private key file
+			privateKeyData, err = ioutil.ReadFile(c.privateKeyPath)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// no private key
+			return nil, nil
 		}
 		var signer ssh.Signer
-		if password != "" {
-			signer, err = ssh.ParsePrivateKeyWithPassphrase(privateKeyData, []byte(password))
+		if c.password != "" {
+			signer, err = ssh.ParsePrivateKeyWithPassphrase(privateKeyData, []byte(c.password))
 		} else {
 			signer, err = ssh.ParsePrivateKey(privateKeyData)
 		}
@@ -482,16 +494,16 @@ func (c *GitClient) getGitAuth(authType GitAuthType, username, password, private
 			return nil, err
 		}
 		auth = &gitssh.PublicKeys{
-			User:   "git",
+			User:   c.username,
 			Signer: signer,
 			HostKeyCallbackHelper: gitssh.HostKeyCallbackHelper{
 				HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 			},
 		}
+		return auth, nil
 	default:
-		return nil, ErrUnsupportedType
+		return nil, ErrInvalidAuthType
 	}
-	return auth, nil
 }
 
 func NewGitClient(opts ...GitOption) (c *GitClient, err error) {
@@ -499,6 +511,7 @@ func NewGitClient(opts ...GitOption) (c *GitClient, err error) {
 	c = &GitClient{
 		isMem:          false,
 		authType:       GitAuthTypeNone,
+		username:       "git",
 		privateKeyPath: getDefaultPublicKeyPath(),
 	}
 

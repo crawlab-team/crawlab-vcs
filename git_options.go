@@ -11,6 +11,54 @@ import (
 
 type GitOption func(c *GitClient)
 
+func WithPath(path string) GitOption {
+	return func(c *GitClient) {
+		c.path = path
+	}
+}
+
+func WithRemoteUrl(url string) GitOption {
+	return func(c *GitClient) {
+		c.remoteUrl = url
+	}
+}
+
+func WithIsMem(isMem bool) GitOption {
+	return func(c *GitClient) {
+		c.isMem = isMem
+	}
+}
+
+func WithAuthType(authType GitAuthType) GitOption {
+	return func(c *GitClient) {
+		c.authType = authType
+	}
+}
+
+func WithUsername(username string) GitOption {
+	return func(c *GitClient) {
+		c.username = username
+	}
+}
+
+func WithPassword(password string) GitOption {
+	return func(c *GitClient) {
+		c.password = password
+	}
+}
+
+func WithPrivateKey(key string) GitOption {
+	return func(c *GitClient) {
+		c.privateKey = key
+	}
+}
+
+func WithPrivateKeyPath(path string) GitOption {
+	return func(c *GitClient) {
+		c.privateKeyPath = path
+	}
+}
+
 type GitCheckoutOption func(o *git.CheckoutOptions)
 
 func WithBranch(branch string) GitCheckoutOption {
