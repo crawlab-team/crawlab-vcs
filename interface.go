@@ -1,11 +1,11 @@
 package vcs
 
 type Client interface {
-	Init(args ...interface{}) (err error)
-	Checkout(args ...interface{}) (err error)
-	Commit(msg string, args ...interface{}) (err error)
-	Pull(args ...interface{}) (err error)
-	Push(args ...interface{}) (err error)
-	Reset(args ...interface{}) (err error)
-	Dispose(args ...interface{}) (err error)
+	Init() (err error)
+	Dispose() (err error)
+	Checkout(opts ...GitCheckoutOption) (err error)
+	Commit(msg string, opts ...GitCommitOption) (err error)
+	Pull(opts ...GitPullOption) (err error)
+	Push(opts ...GitPushOption) (err error)
+	Reset(opts ...GitResetOption) (err error)
 }

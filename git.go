@@ -14,166 +14,31 @@ import (
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"os"
-	"os/user"
 	"path/filepath"
-	"sync"
-	"time"
 )
 
 type GitClient struct {
-	r    *git.Repository
-	opts *GitOptions
+	// settings
+	path           string
+	remoteUrl      string
+	isBare         bool
+	isMem          bool
+	authType       GitAuthType
+	username       string
+	password       string
+	privateKeyPath string
+
+	// internals
+	r *git.Repository
 }
 
-type GitOptions struct {
-	Path           string
-	RemoteUrl      string
-	IsBare         bool
-	IsMem          bool
-	AuthType       GitAuthType
-	Username       string
-	Password       string
-	PrivateKeyPath string
-}
-
-type GitLog struct {
-	Msg         string
-	Branch      string
-	AuthorName  string
-	AuthorEmail string
-	Timestamp   time.Time
-}
-
-var DefaultGitOptions = GitOptions{
-	Path:           "",
-	RemoteUrl:      "",
-	IsBare:         false,
-	IsMem:          false,
-	AuthType:       GitAuthTypeNone,
-	Username:       "",
-	Password:       "",
-	PrivateKeyPath: getDefaultPublicKeyPath(),
-}
-
-var GitMemStorages = sync.Map{}
-var GitMemFileSystem = sync.Map{}
-
-func NewGitClient(options *GitOptions) (c *GitClient, err error) {
-	if options == nil {
-		options = &DefaultGitOptions
-	}
-	if options.PrivateKeyPath == "" {
-		options.PrivateKeyPath = getDefaultPublicKeyPath()
-	}
-	c = &GitClient{
-		opts: options,
-	}
-	if err := c.Init(options.IsBare); err != nil {
-		return c, err
-	}
-	return
-}
-
-func getBranchAndHashAndIsCreateFromArgs(args ...interface{}) (branch plumbing.ReferenceName, hash plumbing.Hash, err error) {
-	if len(args) < 2 {
-		return branch, hash, ErrInvalidArgsLength
-	}
-	if args[0] != nil {
-		branch = plumbing.NewBranchReferenceName(args[0].(string))
-	}
-	if args[1] != nil {
-		hash = plumbing.NewHash(args[1].(string))
-	}
-	return
-}
-
-func getRemoteNameFromArgs(args ...interface{}) (remoteName string, err error) {
-	if len(args) < 1 {
-		return remoteName, ErrInvalidArgsLength
-	}
-	if args[0] == nil {
-		remoteName = GitRemoteNameOrigin
-	} else {
-		remoteName = args[0].(string)
-	}
-	return
-}
-
-func getResetModeFromArgs(args ...interface{}) (mode git.ResetMode, err error) {
-	if len(args) < 1 {
-		return mode, ErrInvalidArgsLength
-	}
-	if args[0] != nil {
-		mode, err = getResetMode(args[0])
-		if err != nil {
-			return mode, err
-		}
-	}
-	return
-}
-
-func getResetMode(mode interface{}) (res git.ResetMode, err error) {
-	switch mode.(type) {
-	case int8:
-		return git.ResetMode(int8(0)), nil
-	case git.ResetMode:
-		return mode.(git.ResetMode), err
-	}
-	return git.MixedReset, ErrUnsupportedType
-}
-
-func getGitAuth(authType GitAuthType, username, password, privateKeyPath string) (auth transport.AuthMethod, err error) {
-	switch authType {
-	case GitAuthTypeNone:
-		auth = nil
-	case GitAuthTypeHTTP:
-		auth = &http.BasicAuth{
-			Username: username,
-			Password: password,
-		}
-	case GitAuthTypeSSH:
-		privateKeyData, err := ioutil.ReadFile(privateKeyPath)
-		if err != nil {
-			return auth, err
-		}
-		var signer ssh.Signer
-		if password != "" {
-			signer, err = ssh.ParsePrivateKeyWithPassphrase(privateKeyData, []byte(password))
-		} else {
-			signer, err = ssh.ParsePrivateKey(privateKeyData)
-		}
-		if err != nil {
-			return nil, err
-		}
-		auth = &gitssh.PublicKeys{
-			User:   "git",
-			Signer: signer,
-			HostKeyCallbackHelper: gitssh.HostKeyCallbackHelper{
-				HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-			},
-		}
-	default:
-		return auth, ErrUnsupportedType
-	}
-	return
-}
-
-func getDefaultPublicKeyPath() (path string) {
-	u, err := user.Current()
-	if err != nil {
-		return path
-	}
-	path = filepath.Join(u.HomeDir, ".ssh", "id_rsa")
-	return
-}
-
-func (c *GitClient) Init(args ...interface{}) (err error) {
-	initType := c.GetInitType()
+func (c *GitClient) Init() (err error) {
+	initType := c.getInitType()
 	switch initType {
 	case GitInitTypeFs:
-		err = c.InitFs()
+		err = c.initFs()
 	case GitInitTypeMem:
-		err = c.InitMem()
+		err = c.initMem()
 	}
 	if err != nil {
 		return err
@@ -185,7 +50,7 @@ func (c *GitClient) Init(args ...interface{}) (err error) {
 	if err != nil {
 		return err
 	}
-	if !c.opts.IsBare && c.opts.RemoteUrl != "" && len(remotes) == 0 {
+	if !c.isBare && c.remoteUrl != "" && len(remotes) == 0 {
 		// attempt to get default remote
 		if _, err := c.r.Remote(GitRemoteNameOrigin); err != nil {
 			if err != git.ErrRemoteNotFound {
@@ -194,12 +59,15 @@ func (c *GitClient) Init(args ...interface{}) (err error) {
 			err = nil
 
 			// create default remote
-			if err := c.CreateRemote(GitRemoteNameOrigin, c.opts.RemoteUrl); err != nil {
+			if err := c.createRemote(GitRemoteNameOrigin, c.remoteUrl); err != nil {
 				return err
 			}
 
 			// pull
-			if err := c.Pull(GitRemoteNameOrigin); err != nil {
+			opts := []GitPullOption{
+				WithRemoteNamePull(GitRemoteNameOrigin),
+			}
+			if err := c.Pull(opts...); err != nil {
 				return err
 			}
 		}
@@ -208,121 +76,174 @@ func (c *GitClient) Init(args ...interface{}) (err error) {
 	return nil
 }
 
-func (c *GitClient) InitMem() (err error) {
-	// validate options
-	if !c.opts.IsMem || c.opts.Path == "" {
-		return ErrInvalidOptions
-	}
-
-	// get storage and worktree
-	storage, wt, err := c.GetMemStorageAndMemFs(c.opts.Path)
-	if err != nil {
-		return err
-	}
-
-	// attempt to init
-	c.r, err = git.Init(storage, wt)
-	if err != nil {
-		if err == git.ErrRepositoryAlreadyExists {
-			// if already exists, attempt to open
-			c.r, err = git.Open(storage, wt)
-			if err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (c *GitClient) InitFs() (err error) {
-	// validate options
-	if c.opts.Path == "" {
-		return ErrInvalidOptions
-	}
-
-	// get path
-	path := c.opts.Path
-	path, err = filepath.Abs(path)
-	if err != nil {
-		return err
-	}
-
-	// create directory if not exists
-	_, err = os.Stat(path)
-	if err != nil {
-		if err := os.MkdirAll(path, os.ModePerm); err != nil {
-			return err
-		}
-	}
-
-	// check if .git exists
-	if _, err := os.Stat(filepath.Join(path, git.GitDirName)); err != nil {
-		// .git not exists, init
-		c.r, err = git.PlainInit(path, c.opts.IsBare)
+func (c *GitClient) Dispose() (err error) {
+	switch c.getInitType() {
+	case GitInitTypeFs:
+		path, err := filepath.Abs(c.path)
 		if err != nil {
 			return err
 		}
-	} else {
-		// .git exists, open
-		c.r, err = git.PlainOpen(path)
-		if err != nil {
+		if err := os.RemoveAll(path); err != nil {
 			return err
 		}
+	case GitInitTypeMem:
+		GitMemStorages.Delete(c.path)
+		GitMemFileSystem.Delete(c.path)
 	}
-
 	return nil
 }
 
-func (c *GitClient) GetInitType() (res GitInitType) {
-	if c.opts.IsMem {
-		return GitInitTypeMem
-	} else {
-		return GitInitTypeFs
-	}
-}
-
-func (c *GitClient) Checkout(args ...interface{}) (err error) {
-	if c.opts.IsBare {
+func (c *GitClient) Checkout(opts ...GitCheckoutOption) (err error) {
+	// validate
+	if c.isBare {
 		return ErrInvalidActionsForBareRepo
 	}
 
-	// get arguments
-	branch, hash, err := getBranchAndHashAndIsCreateFromArgs(args...)
-
-	// get worktree
+	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
 		return err
 	}
 
-	// create checkout options
-	opts := git.CheckoutOptions{
-		Branch: branch,
-	}
-
-	if hash.IsZero() {
-		opts.Hash = hash
-	} else {
-		headRef, err := c.r.Head()
-		if err != nil {
-			return err
-		}
-		opts.Hash = headRef.Hash()
+	// apply options
+	o := &git.CheckoutOptions{}
+	for _, opt := range opts {
+		opt(o)
 	}
 
 	// checkout to the branch
-	if err := wt.Checkout(&opts); err != nil {
+	if err := wt.Checkout(o); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (c *GitClient) CheckoutBranch(branch string, args ...interface{}) (err error) {
-	if c.opts.IsBare {
+func (c *GitClient) Commit(msg string, opts ...GitCommitOption) (err error) {
+	// validate
+	if c.isBare {
+		return ErrInvalidActionsForBareRepo
+	}
+
+	// worktree
+	wt, err := c.r.Worktree()
+	if err != nil {
+		return err
+	}
+
+	// apply options
+	o := &git.CommitOptions{}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	// commit
+	if _, err := wt.Commit(msg, o); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *GitClient) Pull(opts ...GitPullOption) (err error) {
+	// validate
+	if c.isBare {
+		return ErrInvalidActionsForBareRepo
+	}
+
+	// worktree
+	wt, err := c.r.Worktree()
+	if err != nil {
+		return err
+	}
+
+	// auth
+	auth, err := c.getGitAuth(c.authType, c.username, c.password, c.privateKeyPath)
+	if err != nil {
+		return err
+	}
+	if auth != nil {
+		opts = append(opts, WithAuthPull(auth))
+	}
+
+	// apply options
+	o := &git.PullOptions{}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	// pull
+	if err := wt.Pull(o); err != nil {
+		if err == transport.ErrEmptyRemoteRepository {
+			return nil
+		}
+		if err == git.NoErrAlreadyUpToDate {
+			return nil
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (c *GitClient) Push(opts ...GitPushOption) (err error) {
+	// validate
+	if c.isBare {
+		return ErrInvalidActionsForBareRepo
+	}
+
+	// auth
+	auth, err := c.getGitAuth(c.authType, c.username, c.password, c.privateKeyPath)
+	if err != nil {
+		return err
+	}
+	if auth != nil {
+		opts = append(opts, WithAuthPush(auth))
+	}
+
+	// apply options
+	o := &git.PushOptions{}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	// push
+	if err := c.r.Push(o); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *GitClient) Reset(opts ...GitResetOption) (err error) {
+	// validate
+	if c.isBare {
+		return ErrInvalidActionsForBareRepo
+	}
+
+	// apply options
+	o := &git.ResetOptions{}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	// worktree
+	wt, err := c.r.Worktree()
+	if err != nil {
+		return err
+	}
+
+	// reset
+	if err := wt.Reset(o); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *GitClient) CheckoutBranch(branch string, opts ...GitCheckoutOption) (err error) {
+	// validate
+	if c.isBare {
 		return ErrInvalidActionsForBareRepo
 	}
 
@@ -347,51 +268,32 @@ func (c *GitClient) CheckoutBranch(branch string, args ...interface{}) (err erro
 			return err
 		}
 	}
-	return c.Checkout(branch, nil)
+
+	// add to options
+	opts = append(opts, WithBranch(branch))
+
+	return c.Checkout(opts...)
 }
 
-func (c *GitClient) CheckoutHash(hash string, args ...interface{}) (err error) {
-	if c.opts.IsBare {
+func (c *GitClient) CheckoutHash(hash string, opts ...GitCheckoutOption) (err error) {
+	// validate
+	if c.isBare {
 		return ErrInvalidActionsForBareRepo
 	}
 
-	return c.Checkout(nil, hash)
+	// add to options
+	opts = append(opts, WithHash(hash))
+
+	return c.Checkout(opts...)
 }
 
-func (c *GitClient) Commit(msg string, args ...interface{}) (err error) {
-	if c.opts.IsBare {
+func (c *GitClient) CommitAll(msg string, opts ...GitCommitOption) (err error) {
+	// validate
+	if c.isBare {
 		return ErrInvalidActionsForBareRepo
 	}
 
-	// get worktree
-	wt, err := c.r.Worktree()
-	if err != nil {
-		return err
-	}
-
-	// commit options
-	opts := git.CommitOptions{
-		All:       false,
-		Author:    nil,
-		Committer: nil,
-		Parents:   nil,
-		SignKey:   nil,
-	}
-
-	// commit
-	if _, err := wt.Commit(msg, &opts); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *GitClient) CommitAll(msg string, args ...interface{}) (err error) {
-	if c.opts.IsBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
-	// get worktree
+	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
 		return err
@@ -402,150 +304,7 @@ func (c *GitClient) CommitAll(msg string, args ...interface{}) (err error) {
 		return err
 	}
 
-	return c.Commit(msg, args...)
-}
-
-func (c *GitClient) Pull(args ...interface{}) (err error) {
-	if c.opts.IsBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
-	// get remote name
-	remoteName, err := getRemoteNameFromArgs(args...)
-	if err != nil {
-		return err
-	}
-
-	// get worktree
-	wt, err := c.r.Worktree()
-	if err != nil {
-		return err
-	}
-
-	// pull options
-	opts := git.PullOptions{
-		RemoteName:   remoteName,
-		SingleBranch: true,
-	}
-
-	// auth options
-	auth, err := getGitAuth(c.opts.AuthType, c.opts.Username, c.opts.Password, c.opts.PrivateKeyPath)
-	if err != nil {
-		return err
-	}
-	if auth != nil {
-		opts.Auth = auth
-	}
-
-	// pull
-	if err := wt.Pull(&opts); err != nil {
-		if err == transport.ErrEmptyRemoteRepository {
-			return nil
-		}
-		if err == git.NoErrAlreadyUpToDate {
-			return nil
-		}
-		return err
-	}
-
-	return nil
-}
-
-func (c *GitClient) Push(args ...interface{}) (err error) {
-	if c.opts.IsBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
-	// get remote name
-	remoteName, err := getRemoteNameFromArgs(args...)
-	if err != nil {
-		return err
-	}
-
-	// get remote
-	remote, err := c.r.Remote(remoteName)
-	if err != nil {
-		return err
-	}
-
-	// push options
-	opts := git.PushOptions{
-		RemoteName: remoteName,
-	}
-
-	// auth options
-	auth, err := getGitAuth(c.opts.AuthType, c.opts.Username, c.opts.Password, c.opts.PrivateKeyPath)
-	if err != nil {
-		return err
-	}
-	if auth != nil {
-		opts.Auth = auth
-	}
-
-	// push to remote
-	if err := remote.Push(&opts); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *GitClient) Reset(args ...interface{}) (err error) {
-	if c.opts.IsBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
-	// get mode
-	mode, err := getResetModeFromArgs(args...)
-	if err != nil {
-		return err
-	}
-
-	// get worktree
-	wt, err := c.r.Worktree()
-	if err != nil {
-		return err
-	}
-
-	// reset
-	if err := wt.Reset(&git.ResetOptions{
-		Mode: mode,
-	}); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *GitClient) Dispose(args ...interface{}) (err error) {
-	switch c.GetInitType() {
-	case GitInitTypeFs:
-		path, err := filepath.Abs(c.opts.Path)
-		if err != nil {
-			return err
-		}
-		if err := os.RemoveAll(path); err != nil {
-			return err
-		}
-	case GitInitTypeMem:
-		GitMemStorages.Delete(c.opts.Path)
-		GitMemFileSystem.Delete(c.opts.Path)
-	}
-	return nil
-}
-
-func (c *GitClient) CreateRemote(remoteName string, url string) (err error) {
-	if c.opts.IsBare {
-		return ErrInvalidActionsForBareRepo
-	}
-	_, err = c.r.CreateRemote(&config.RemoteConfig{
-		Name: remoteName,
-		URLs: []string{url},
-	})
-	if err != nil {
-		return err
-	}
-	return
+	return c.Commit(msg, opts...)
 }
 
 func (c *GitClient) GetLogs() (logs []GitLog, err error) {
@@ -571,7 +330,97 @@ func (c *GitClient) GetLogs() (logs []GitLog, err error) {
 	return
 }
 
-func (c *GitClient) GetMemStorageAndMemFs(key string) (storage *memory.Storage, fs billy.Filesystem, err error) {
+func (c *GitClient) initMem() (err error) {
+	// validate options
+	if !c.isMem || c.path == "" {
+		return ErrInvalidOptions
+	}
+
+	// get storage and worktree
+	storage, wt, err := c.getMemStorageAndMemFs(c.path)
+	if err != nil {
+		return err
+	}
+
+	// attempt to init
+	c.r, err = git.Init(storage, wt)
+	if err != nil {
+		if err == git.ErrRepositoryAlreadyExists {
+			// if already exists, attempt to open
+			c.r, err = git.Open(storage, wt)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *GitClient) initFs() (err error) {
+	// validate options
+	if c.path == "" {
+		return ErrInvalidOptions
+	}
+
+	// get path
+	path := c.path
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+
+	// create directory if not exists
+	_, err = os.Stat(path)
+	if err != nil {
+		if err := os.MkdirAll(path, os.ModePerm); err != nil {
+			return err
+		}
+		err = nil
+	}
+
+	// try to open repo
+	c.r, err = git.PlainOpen(path)
+	if err == git.ErrRepositoryNotExists {
+		// repo not exists, init
+		c.r, err = git.PlainInit(path, c.isBare)
+		if err != nil {
+			return err
+		}
+		err = nil
+	} else if err != nil {
+		// error
+		return err
+	}
+
+	return nil
+}
+
+func (c *GitClient) getInitType() (res GitInitType) {
+	if c.isMem {
+		return GitInitTypeMem
+	} else {
+		return GitInitTypeFs
+	}
+}
+
+func (c *GitClient) createRemote(remoteName string, url string) (err error) {
+	if c.isBare {
+		return ErrInvalidActionsForBareRepo
+	}
+	_, err = c.r.CreateRemote(&config.RemoteConfig{
+		Name: remoteName,
+		URLs: []string{url},
+	})
+	if err != nil {
+		return err
+	}
+	return
+}
+
+func (c *GitClient) getMemStorageAndMemFs(key string) (storage *memory.Storage, fs billy.Filesystem, err error) {
 	// storage
 	storageItem, ok := GitMemStorages.Load(key)
 	if !ok {
@@ -603,4 +452,109 @@ func (c *GitClient) GetMemStorageAndMemFs(key string) (storage *memory.Storage, 
 	}
 
 	return storage, fs, nil
+}
+
+func (c *GitClient) getBranchAndHashAndIsCreateFromArgs(args ...interface{}) (branch plumbing.ReferenceName, hash plumbing.Hash, err error) {
+	if len(args) < 2 {
+		return branch, hash, ErrInvalidArgsLength
+	}
+	if args[0] != nil {
+		branch = plumbing.NewBranchReferenceName(args[0].(string))
+	}
+	if args[1] != nil {
+		hash = plumbing.NewHash(args[1].(string))
+	}
+	return
+}
+
+func (c *GitClient) getRemoteNameFromArgs(args ...interface{}) (remoteName string, err error) {
+	if len(args) < 1 {
+		return remoteName, ErrInvalidArgsLength
+	}
+	if args[0] == nil {
+		remoteName = GitRemoteNameOrigin
+	} else {
+		remoteName = args[0].(string)
+	}
+	return
+}
+
+func (c *GitClient) getResetModeFromArgs(args ...interface{}) (mode git.ResetMode, err error) {
+	if len(args) < 1 {
+		return mode, ErrInvalidArgsLength
+	}
+	if args[0] != nil {
+		mode, err = c.getResetMode(args[0])
+		if err != nil {
+			return mode, err
+		}
+	}
+	return
+}
+
+func (c *GitClient) getResetMode(mode interface{}) (res git.ResetMode, err error) {
+	switch mode.(type) {
+	case int8:
+		return git.ResetMode(int8(0)), nil
+	case git.ResetMode:
+		return mode.(git.ResetMode), err
+	}
+	return git.MixedReset, ErrUnsupportedType
+}
+
+func (c *GitClient) getGitAuth(authType GitAuthType, username, password, privateKeyPath string) (auth transport.AuthMethod, err error) {
+	switch authType {
+	case GitAuthTypeNone:
+		auth = nil
+	case GitAuthTypeHTTP:
+		auth = &http.BasicAuth{
+			Username: username,
+			Password: password,
+		}
+	case GitAuthTypeSSH:
+		privateKeyData, err := ioutil.ReadFile(privateKeyPath)
+		if err != nil {
+			return nil, err
+		}
+		var signer ssh.Signer
+		if password != "" {
+			signer, err = ssh.ParsePrivateKeyWithPassphrase(privateKeyData, []byte(password))
+		} else {
+			signer, err = ssh.ParsePrivateKey(privateKeyData)
+		}
+		if err != nil {
+			return nil, err
+		}
+		auth = &gitssh.PublicKeys{
+			User:   "git",
+			Signer: signer,
+			HostKeyCallbackHelper: gitssh.HostKeyCallbackHelper{
+				HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			},
+		}
+	default:
+		return nil, ErrUnsupportedType
+	}
+	return auth, nil
+}
+
+func NewGitClient(opts ...GitOption) (c *GitClient, err error) {
+	// client
+	c = &GitClient{
+		isBare:         false,
+		isMem:          false,
+		authType:       GitAuthTypeNone,
+		privateKeyPath: getDefaultPublicKeyPath(),
+	}
+
+	// apply options
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	if err := c.Init(); err != nil {
+		return c, err
+	}
+
+	return
 }
