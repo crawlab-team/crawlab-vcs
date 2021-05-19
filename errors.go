@@ -3,8 +3,9 @@ package vcs
 import "errors"
 
 var (
-	ErrInvalidActionsForBareRepo = errors.New("invalid actions for bare repo")
-	ErrInvalidArgsLength         = errors.New("invalid arguments length")
-	ErrUnsupportedType           = errors.New("unsupported type")
-	ErrInvalidOptions            = errors.New("invalid options")
+	ErrInvalidArgsLength = errors.New("invalid arguments length")
+	ErrUnsupportedType   = errors.New("unsupported type")
+	ErrInvalidOptions    = errors.New("invalid options")
+	ErrRepoAlreadyExists = errors.New("repo already exists")
+	ErrInvalidRepoPath   = errors.New("invalid repo path")
 )

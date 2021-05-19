@@ -21,7 +21,6 @@ type GitClient struct {
 	// settings
 	path           string
 	remoteUrl      string
-	isBare         bool
 	isMem          bool
 	authType       GitAuthType
 	username       string
@@ -44,13 +43,13 @@ func (c *GitClient) Init() (err error) {
 		return err
 	}
 
-	// if not bare and remote url is not empty and no remote exists
+	// if remote url is not empty and no remote exists
 	// create default remote and pull from remote url
 	remotes, err := c.r.Remotes()
 	if err != nil {
 		return err
 	}
-	if !c.isBare && c.remoteUrl != "" && len(remotes) == 0 {
+	if c.remoteUrl != "" && len(remotes) == 0 {
 		// attempt to get default remote
 		if _, err := c.r.Remote(GitRemoteNameOrigin); err != nil {
 			if err != git.ErrRemoteNotFound {
@@ -94,11 +93,6 @@ func (c *GitClient) Dispose() (err error) {
 }
 
 func (c *GitClient) Checkout(opts ...GitCheckoutOption) (err error) {
-	// validate
-	if c.isBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
@@ -120,11 +114,6 @@ func (c *GitClient) Checkout(opts ...GitCheckoutOption) (err error) {
 }
 
 func (c *GitClient) Commit(msg string, opts ...GitCommitOption) (err error) {
-	// validate
-	if c.isBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
@@ -146,11 +135,6 @@ func (c *GitClient) Commit(msg string, opts ...GitCommitOption) (err error) {
 }
 
 func (c *GitClient) Pull(opts ...GitPullOption) (err error) {
-	// validate
-	if c.isBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
@@ -187,11 +171,6 @@ func (c *GitClient) Pull(opts ...GitPullOption) (err error) {
 }
 
 func (c *GitClient) Push(opts ...GitPushOption) (err error) {
-	// validate
-	if c.isBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
 	// auth
 	auth, err := c.getGitAuth(c.authType, c.username, c.password, c.privateKeyPath)
 	if err != nil {
@@ -216,11 +195,6 @@ func (c *GitClient) Push(opts ...GitPushOption) (err error) {
 }
 
 func (c *GitClient) Reset(opts ...GitResetOption) (err error) {
-	// validate
-	if c.isBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
 	// apply options
 	o := &git.ResetOptions{}
 	for _, opt := range opts {
@@ -242,11 +216,6 @@ func (c *GitClient) Reset(opts ...GitResetOption) (err error) {
 }
 
 func (c *GitClient) CheckoutBranch(branch string, opts ...GitCheckoutOption) (err error) {
-	// validate
-	if c.isBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
 	// check if the branch exists
 	if _, err := c.r.Branch(branch); err != nil {
 		if err == git.ErrBranchNotFound {
@@ -276,11 +245,6 @@ func (c *GitClient) CheckoutBranch(branch string, opts ...GitCheckoutOption) (er
 }
 
 func (c *GitClient) CheckoutHash(hash string, opts ...GitCheckoutOption) (err error) {
-	// validate
-	if c.isBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
 	// add to options
 	opts = append(opts, WithHash(hash))
 
@@ -288,11 +252,6 @@ func (c *GitClient) CheckoutHash(hash string, opts ...GitCheckoutOption) (err er
 }
 
 func (c *GitClient) CommitAll(msg string, opts ...GitCommitOption) (err error) {
-	// validate
-	if c.isBare {
-		return ErrInvalidActionsForBareRepo
-	}
-
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
@@ -385,7 +344,7 @@ func (c *GitClient) initFs() (err error) {
 	c.r, err = git.PlainOpen(path)
 	if err == git.ErrRepositoryNotExists {
 		// repo not exists, init
-		c.r, err = git.PlainInit(path, c.isBare)
+		c.r, err = git.PlainInit(path, false)
 		if err != nil {
 			return err
 		}
@@ -407,9 +366,6 @@ func (c *GitClient) getInitType() (res GitInitType) {
 }
 
 func (c *GitClient) createRemote(remoteName string, url string) (err error) {
-	if c.isBare {
-		return ErrInvalidActionsForBareRepo
-	}
 	_, err = c.r.CreateRemote(&config.RemoteConfig{
 		Name: remoteName,
 		URLs: []string{url},
@@ -541,7 +497,6 @@ func (c *GitClient) getGitAuth(authType GitAuthType, username, password, private
 func NewGitClient(opts ...GitOption) (c *GitClient, err error) {
 	// client
 	c = &GitClient{
-		isBare:         false,
 		isMem:          false,
 		authType:       GitAuthTypeNone,
 		privateKeyPath: getDefaultPublicKeyPath(),
@@ -552,6 +507,7 @@ func NewGitClient(opts ...GitOption) (c *GitClient, err error) {
 		opt(c)
 	}
 
+	// init
 	if err := c.Init(); err != nil {
 		return c, err
 	}
