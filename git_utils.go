@@ -33,6 +33,24 @@ func CreateBareGitRepo(path string) (err error) {
 	return nil
 }
 
+func CloneGitRepo(path, url string, opts ...GitCloneOption) (c *GitClient, err error) {
+	// url
+	opts = append(opts, WithURL(url))
+
+	// apply options
+	o := &git.CloneOptions{}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	// clone
+	if _, err := git.PlainClone(path, false, o); err != nil {
+		return nil, err
+	}
+
+	return NewGitClient(WithPath(path))
+}
+
 func IsGitRepoExists(path string) (ok bool) {
 	if _, err := git.PlainOpen(path); err != nil {
 		return false

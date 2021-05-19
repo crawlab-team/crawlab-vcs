@@ -227,12 +227,22 @@ func (c *GitClient) CheckoutBranch(branch string, opts ...GitCheckoutOption) (er
 			if err := c.r.CreateBranch(&cfg); err != nil {
 				return err
 			}
+
+			// HEAD reference
 			headRef, err := c.r.Head()
-			if err == nil {
-				ref := plumbing.NewHashReference(plumbing.NewBranchReferenceName(branch), headRef.Hash())
-				if err := c.r.Storer.SetReference(ref); err != nil {
-					return err
-				}
+			if err != nil {
+				return err
+			}
+
+			// branch reference name
+			branchRefName := plumbing.NewBranchReferenceName(branch)
+
+			// branch reference
+			ref := plumbing.NewHashReference(branchRefName, headRef.Hash())
+
+			// set HEAD to branch reference
+			if err := c.r.Storer.SetReference(ref); err != nil {
+				return err
 			}
 		} else {
 			return err
@@ -288,6 +298,45 @@ func (c *GitClient) GetLogs() (logs []GitLog, err error) {
 		return logs, err
 	}
 	return
+}
+
+func (c *GitClient) GetRepository() (r *git.Repository) {
+	return c.r
+}
+
+func (c *GitClient) GetPath() (path string) {
+	return c.path
+}
+
+func (c *GitClient) GetRemoteUrl() (path string) {
+	return c.remoteUrl
+}
+
+func (c *GitClient) GetIsMem() (isMem bool) {
+	return c.isMem
+}
+
+func (c *GitClient) GetAuthType() (authType GitAuthType) {
+	return c.authType
+}
+
+func (c *GitClient) GetUsername() (username string) {
+	return c.username
+}
+
+func (c *GitClient) GetPrivateKeyPath() (path string) {
+	return c.privateKeyPath
+}
+
+func (c *GitClient) GetCurrentBranch() (branch string, err error) {
+	headRef, err := c.r.Head()
+	if err != nil {
+		return branch, err
+	}
+	if !headRef.Name().IsBranch() {
+		return branch, ErrUnableToGetCurrentBranch
+	}
+	return headRef.Name().String(), nil
 }
 
 func (c *GitClient) initMem() (err error) {
@@ -349,9 +398,34 @@ func (c *GitClient) initFs() (err error) {
 		if err != nil {
 			return err
 		}
-		err = nil
 	} else if err != nil {
 		// error
+		return err
+	}
+
+	return nil
+}
+
+func (c *GitClient) clone() (err error) {
+	// validate
+	if c.remoteUrl == "" {
+		return ErrUnableToCloneWithEmptyRemoteUrl
+	}
+
+	// auth
+	auth, err := c.getGitAuth()
+	if err != nil {
+		return err
+	}
+
+	// options
+	o := &git.CloneOptions{
+		URL:  c.remoteUrl,
+		Auth: auth,
+	}
+
+	// clone
+	if _, err := git.PlainClone(c.path, false, o); err != nil {
 		return err
 	}
 

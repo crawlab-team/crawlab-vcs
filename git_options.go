@@ -23,9 +23,9 @@ func WithRemoteUrl(url string) GitOption {
 	}
 }
 
-func WithIsMem(isMem bool) GitOption {
+func WithIsMem() GitOption {
 	return func(c *GitClient) {
-		c.isMem = isMem
+		c.isMem = true
 	}
 }
 
@@ -56,6 +56,56 @@ func WithPrivateKey(key string) GitOption {
 func WithPrivateKeyPath(path string) GitOption {
 	return func(c *GitClient) {
 		c.privateKeyPath = path
+	}
+}
+
+type GitCloneOption func(o *git.CloneOptions)
+
+func WithURL(url string) GitCloneOption {
+	return func(o *git.CloneOptions) {
+		o.URL = url
+	}
+}
+
+func WithAuthClone(auth transport.AuthMethod) GitCloneOption {
+	return func(o *git.CloneOptions) {
+		o.Auth = auth
+	}
+}
+
+func WithRemoteName(name string) GitCloneOption {
+	return func(o *git.CloneOptions) {
+		o.RemoteName = name
+	}
+}
+
+func WithSingleBranch(singleBranch bool) GitCloneOption {
+	return func(o *git.CloneOptions) {
+		o.SingleBranch = singleBranch
+	}
+}
+
+func WithNoCheckout(noCheckout bool) GitCloneOption {
+	return func(o *git.CloneOptions) {
+		o.NoCheckout = noCheckout
+	}
+}
+
+func WithDepthClone(depth int) GitCloneOption {
+	return func(o *git.CloneOptions) {
+		o.Depth = depth
+	}
+}
+
+func WithRecurseSubmodules(recurseSubmodules git.SubmoduleRescursivity) GitCloneOption {
+	return func(o *git.CloneOptions) {
+		o.RecurseSubmodules = recurseSubmodules
+	}
+}
+
+func WithTags(tags git.TagMode) GitCloneOption {
+	return func(o *git.CloneOptions) {
+		o.Tags = tags
 	}
 }
 
@@ -123,7 +173,7 @@ func WithReferenceNamePull(branch string) GitPullOption {
 	}
 }
 
-func WithDepth(depth int) GitPullOption {
+func WithDepthPull(depth int) GitPullOption {
 	return func(o *git.PullOptions) {
 		o.Depth = depth
 	}
@@ -137,7 +187,7 @@ func WithAuthPull(auth transport.AuthMethod) GitPullOption {
 	}
 }
 
-func WithRecurseSubmodules(recurseSubmodules git.SubmoduleRescursivity) GitPullOption {
+func WithRecurseSubmodulesPull(recurseSubmodules git.SubmoduleRescursivity) GitPullOption {
 	return func(o *git.PullOptions) {
 		o.RecurseSubmodules = recurseSubmodules
 	}

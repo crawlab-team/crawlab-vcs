@@ -16,4 +16,4 @@
 .DS_Store
 .idea/
 tmp/
-credentials.json
+test/credentials.json
