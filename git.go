@@ -193,7 +193,9 @@ func (c *GitClient) Push(opts ...GitPushOption) (err error) {
 
 func (c *GitClient) Reset(opts ...GitResetOption) (err error) {
 	// apply options
-	o := &git.ResetOptions{}
+	o := &git.ResetOptions{
+		Mode: git.HardReset,
+	}
 	for _, opt := range opts {
 		opt(o)
 	}
