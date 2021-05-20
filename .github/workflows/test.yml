@@ -24,6 +24,11 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/test/.ssh
           echo '$SSH_KEY' > $GITHUB_WORKSPACE/test/.ssh/id_rsa
 
+      - name: Validate Credentials
+        run: |
+          cat $GITHUB_WORKSPACE/test/credentials.json
+          cat $GITHUB_WORKSPACE/test/.ssh/id_rsa
+
       - name: Run Tests
         run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic -coverpkg github.com/crawlab-team/crawlab-vcs
 
