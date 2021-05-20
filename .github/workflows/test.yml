@@ -13,6 +13,11 @@ jobs:
         with:
           go-version: 1.15
 
+      - name: Configure Git
+        run: |
+          git config --global user.name "Marvin Zhang"
+          git config --global user.email "tikazyq@163.com"
+
       - name: Write Credentials
         run: |
           echo '$CREDENTIAL_JSON' > $GITHUB_WORKSPACE/credentials.json
