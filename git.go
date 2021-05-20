@@ -79,11 +79,7 @@ func (c *GitClient) Init() (err error) {
 func (c *GitClient) Dispose() (err error) {
 	switch c.getInitType() {
 	case GitInitTypeFs:
-		path, err := filepath.Abs(c.path)
-		if err != nil {
-			return err
-		}
-		if err := os.RemoveAll(path); err != nil {
+		if err := os.RemoveAll(c.path); err != nil {
 			return err
 		}
 	case GitInitTypeMem:

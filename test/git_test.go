@@ -54,21 +54,7 @@ func TestNewGitClient_Mem(t *testing.T) {
 	require.NotEmpty(t, c.GetRepository())
 }
 
-func TestGitClient_CheckoutBranch(t *testing.T) {
-	var err error
-	T.Setup(t)
-
-	// checkout branch
-	err = T.LocalRepo.CheckoutBranch(T.TestBranchName)
-	require.Nil(t, err)
-
-	// validate
-	b, err := T.LocalRepo.GetRepository().Branch(T.TestBranchName)
-	require.Nil(t, err)
-	require.Equal(t, T.TestBranchName, b.Name)
-}
-
-func TestGitClient_CommitAll(t *testing.T) {
+func TestGitClient_CommitAllAndCheckoutBranch(t *testing.T) {
 	var err error
 	T.Setup(t)
 
@@ -86,7 +72,7 @@ func TestGitClient_CommitAll(t *testing.T) {
 	// validate
 	branch, err := T.LocalRepo.GetCurrentBranch()
 	require.Nil(t, err)
-	require.Equal(t, plumbing.NewBranchReferenceName(T.TestBranchName), branch)
+	require.Equal(t, plumbing.NewBranchReferenceName(T.TestBranchName).String(), branch)
 }
 
 func TestGitClient_Push(t *testing.T) {
@@ -266,6 +252,7 @@ func TestGitClient_Dispose_Mem(t *testing.T) {
 	c, err := vcs.NewGitClient(
 		vcs.WithPath(T.MemRepoPath),
 		vcs.WithRemoteUrl(T.RemoteRepoPath),
+		vcs.WithIsMem(),
 	)
 	require.Nil(t, err)
 

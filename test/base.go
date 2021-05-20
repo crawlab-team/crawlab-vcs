@@ -7,6 +7,7 @@ import (
 	"path"
 	"sync"
 	"testing"
+	"time"
 )
 
 func init() {
@@ -38,6 +39,11 @@ type Test struct {
 func (t *Test) Setup(t2 *testing.T) {
 	var err error
 
+	// remote repo
+	if err := vcs.CreateBareGitRepo(t.RemoteRepoPath); err != nil {
+		panic(err)
+	}
+
 	// local repo (fs)
 	t.LocalRepo, err = vcs.NewGitClient(
 		vcs.WithPath(t.LocalRepoPath),
@@ -52,6 +58,9 @@ func (t *Test) Setup(t2 *testing.T) {
 	if err := ioutil.WriteFile(filePath, []byte(t.InitialReadmeFileContent), os.FileMode(0766)); err != nil {
 		panic(err)
 	}
+	if err := t.LocalRepo.CommitAll(t.InitialCommitMessage); err != nil {
+		panic(err)
+	}
 
 	t2.Cleanup(t.Cleanup)
 }
@@ -60,9 +69,15 @@ func (t *Test) Cleanup() {
 	if err := T.LocalRepo.Dispose(); err != nil {
 		panic(err)
 	}
+	if err := os.RemoveAll(T.RemoteRepoPath); err != nil {
+		panic(err)
+	}
 
 	vcs.GitMemStorages = sync.Map{}
 	vcs.GitMemFileSystem = sync.Map{}
+
+	// wait to avoid caching
+	time.Sleep(500 * time.Millisecond)
 }
 
 func NewTest() (t *Test, err error) {
@@ -74,11 +89,6 @@ func NewTest() (t *Test, err error) {
 
 	// remote repo path
 	t.RemoteRepoPath = "./tmp/test_remote_repo"
-
-	// remote repo
-	if err := vcs.CreateBareGitRepo(t.RemoteRepoPath); err != nil {
-		return nil, err
-	}
 
 	// local repo path
 	t.LocalRepoPath = "./tmp/test_local_repo"
