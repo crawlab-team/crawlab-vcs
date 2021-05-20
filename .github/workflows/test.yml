@@ -13,6 +13,12 @@ jobs:
         with:
           go-version: 1.15
 
+      - name: Write Credentials
+        run: |
+          echo '$CREDENTIAL_JSON' > $GITHUB_WORKSPACE/credentials.json
+          mkdir -p $GITHUB_WORKSPACE/.ssh
+          echo '$SSH_KEY' > $GITHUB_WORKSPACE/.ssh/id_rsa
+
       - name: Run Tests
         run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic -coverpkg github.com/crawlab-team/crawlab-vcs
 

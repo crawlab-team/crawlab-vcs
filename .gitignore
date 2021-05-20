@@ -17,3 +17,4 @@
 .idea/
 tmp/
 test/credentials.json
+id_rsa*
