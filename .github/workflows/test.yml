@@ -20,7 +20,7 @@ jobs:
 
       - name: Write Credentials
         run: |
-          echo '$CREDENTIAL_JSON' > $GITHUB_WORKSPACE/test/credentials.json
+          echo "$CREDENTIAL_JSON" > $GITHUB_WORKSPACE/test/credentials.json
           mkdir -p $GITHUB_WORKSPACE/test/.ssh
           echo '$SSH_KEY' > $GITHUB_WORKSPACE/test/.ssh/id_rsa
 

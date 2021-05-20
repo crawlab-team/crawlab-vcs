@@ -1,6 +1,7 @@
 package vcs
 
 import (
+	"github.com/crawlab-team/go-trace"
 	"github.com/go-git/go-billy/v5"
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
@@ -14,7 +15,6 @@ import (
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 )
 
 type GitClient struct {
@@ -54,7 +54,7 @@ func (c *GitClient) Init() (err error) {
 		// attempt to get default remote
 		if _, err := c.r.Remote(GitRemoteNameOrigin); err != nil {
 			if err != git.ErrRemoteNotFound {
-				return err
+				return trace.TraceError(err)
 			}
 			err = nil
 
@@ -80,7 +80,7 @@ func (c *GitClient) Dispose() (err error) {
 	switch c.getInitType() {
 	case GitInitTypeFs:
 		if err := os.RemoveAll(c.path); err != nil {
-			return err
+			return trace.TraceError(err)
 		}
 	case GitInitTypeMem:
 		GitMemStorages.Delete(c.path)
@@ -93,7 +93,7 @@ func (c *GitClient) Checkout(opts ...GitCheckoutOption) (err error) {
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	// apply options
@@ -104,7 +104,7 @@ func (c *GitClient) Checkout(opts ...GitCheckoutOption) (err error) {
 
 	// checkout to the branch
 	if err := wt.Checkout(o); err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	return nil
@@ -114,7 +114,7 @@ func (c *GitClient) Commit(msg string, opts ...GitCommitOption) (err error) {
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	// apply options
@@ -125,7 +125,7 @@ func (c *GitClient) Commit(msg string, opts ...GitCommitOption) (err error) {
 
 	// commit
 	if _, err := wt.Commit(msg, o); err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	return nil
@@ -135,7 +135,7 @@ func (c *GitClient) Pull(opts ...GitPullOption) (err error) {
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	// auth
@@ -161,7 +161,7 @@ func (c *GitClient) Pull(opts ...GitPullOption) (err error) {
 		if err == git.NoErrAlreadyUpToDate {
 			return nil
 		}
-		return err
+		return trace.TraceError(err)
 	}
 
 	return nil
@@ -185,7 +185,7 @@ func (c *GitClient) Push(opts ...GitPushOption) (err error) {
 
 	// push
 	if err := c.r.Push(o); err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	return nil
@@ -201,12 +201,12 @@ func (c *GitClient) Reset(opts ...GitResetOption) (err error) {
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	// reset
 	if err := wt.Reset(o); err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	return nil
@@ -221,13 +221,13 @@ func (c *GitClient) CheckoutBranch(branch string, opts ...GitCheckoutOption) (er
 				Name: branch,
 			}
 			if err := c.r.CreateBranch(&cfg); err != nil {
-				return err
+				return trace.TraceError(err)
 			}
 
 			// HEAD reference
 			headRef, err := c.r.Head()
 			if err != nil {
-				return err
+				return trace.TraceError(err)
 			}
 
 			// branch reference name
@@ -238,10 +238,10 @@ func (c *GitClient) CheckoutBranch(branch string, opts ...GitCheckoutOption) (er
 
 			// set HEAD to branch reference
 			if err := c.r.Storer.SetReference(ref); err != nil {
-				return err
+				return trace.TraceError(err)
 			}
 		} else {
-			return err
+			return trace.TraceError(err)
 		}
 	}
 
@@ -262,12 +262,12 @@ func (c *GitClient) CommitAll(msg string, opts ...GitCommitOption) (err error) {
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	// add all files
 	if _, err := wt.Add("."); err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	return c.Commit(msg, opts...)
@@ -278,7 +278,7 @@ func (c *GitClient) GetLogs() (logs []GitLog, err error) {
 		All: true,
 	})
 	if err != nil {
-		return logs, err
+		return nil, trace.TraceError(err)
 	}
 	if err := iter.ForEach(func(commit *object.Commit) error {
 		log := GitLog{
@@ -291,7 +291,7 @@ func (c *GitClient) GetLogs() (logs []GitLog, err error) {
 		logs = append(logs, log)
 		return nil
 	}); err != nil {
-		return logs, err
+		return nil, trace.TraceError(err)
 	}
 	return
 }
@@ -327,10 +327,10 @@ func (c *GitClient) GetPrivateKeyPath() (path string) {
 func (c *GitClient) GetCurrentBranch() (branch string, err error) {
 	headRef, err := c.r.Head()
 	if err != nil {
-		return branch, err
+		return "", trace.TraceError(err)
 	}
 	if !headRef.Name().IsBranch() {
-		return branch, ErrUnableToGetCurrentBranch
+		return "", trace.TraceError(ErrUnableToGetCurrentBranch)
 	}
 	return headRef.Name().String(), nil
 }
@@ -338,14 +338,11 @@ func (c *GitClient) GetCurrentBranch() (branch string, err error) {
 func (c *GitClient) initMem() (err error) {
 	// validate options
 	if !c.isMem || c.path == "" {
-		return ErrInvalidOptions
+		return trace.TraceError(ErrInvalidOptions)
 	}
 
 	// get storage and worktree
-	storage, wt, err := c.getMemStorageAndMemFs(c.path)
-	if err != nil {
-		return err
-	}
+	storage, wt := c.getMemStorageAndMemFs(c.path)
 
 	// attempt to init
 	c.r, err = git.Init(storage, wt)
@@ -354,10 +351,10 @@ func (c *GitClient) initMem() (err error) {
 			// if already exists, attempt to open
 			c.r, err = git.Open(storage, wt)
 			if err != nil {
-				return err
+				return trace.TraceError(err)
 			}
 		} else {
-			return err
+			return trace.TraceError(err)
 		}
 	}
 
@@ -367,36 +364,29 @@ func (c *GitClient) initMem() (err error) {
 func (c *GitClient) initFs() (err error) {
 	// validate options
 	if c.path == "" {
-		return ErrInvalidOptions
-	}
-
-	// get path
-	path := c.path
-	path, err = filepath.Abs(path)
-	if err != nil {
-		return err
+		return trace.TraceError(ErrInvalidOptions)
 	}
 
 	// create directory if not exists
-	_, err = os.Stat(path)
+	_, err = os.Stat(c.path)
 	if err != nil {
-		if err := os.MkdirAll(path, os.ModePerm); err != nil {
-			return err
+		if err := os.MkdirAll(c.path, os.ModePerm); err != nil {
+			return trace.TraceError(err)
 		}
 		err = nil
 	}
 
 	// try to open repo
-	c.r, err = git.PlainOpen(path)
+	c.r, err = git.PlainOpen(c.path)
 	if err == git.ErrRepositoryNotExists {
 		// repo not exists, init
-		c.r, err = git.PlainInit(path, false)
+		c.r, err = git.PlainInit(c.path, false)
 		if err != nil {
-			return err
+			return trace.TraceError(err)
 		}
 	} else if err != nil {
 		// error
-		return err
+		return trace.TraceError(err)
 	}
 
 	return nil
@@ -405,7 +395,7 @@ func (c *GitClient) initFs() (err error) {
 func (c *GitClient) clone() (err error) {
 	// validate
 	if c.remoteUrl == "" {
-		return ErrUnableToCloneWithEmptyRemoteUrl
+		return trace.TraceError(ErrUnableToCloneWithEmptyRemoteUrl)
 	}
 
 	// auth
@@ -422,7 +412,7 @@ func (c *GitClient) clone() (err error) {
 
 	// clone
 	if _, err := git.PlainClone(c.path, false, o); err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	return nil
@@ -442,12 +432,12 @@ func (c *GitClient) createRemote(remoteName string, url string) (err error) {
 		URLs: []string{url},
 	})
 	if err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 	return
 }
 
-func (c *GitClient) getMemStorageAndMemFs(key string) (storage *memory.Storage, fs billy.Filesystem, err error) {
+func (c *GitClient) getMemStorageAndMemFs(key string) (storage *memory.Storage, fs billy.Filesystem) {
 	// storage
 	storageItem, ok := GitMemStorages.Load(key)
 	if !ok {
@@ -478,55 +468,7 @@ func (c *GitClient) getMemStorageAndMemFs(key string) (storage *memory.Storage, 
 		}
 	}
 
-	return storage, fs, nil
-}
-
-func (c *GitClient) getBranchAndHashAndIsCreateFromArgs(args ...interface{}) (branch plumbing.ReferenceName, hash plumbing.Hash, err error) {
-	if len(args) < 2 {
-		return branch, hash, ErrInvalidArgsLength
-	}
-	if args[0] != nil {
-		branch = plumbing.NewBranchReferenceName(args[0].(string))
-	}
-	if args[1] != nil {
-		hash = plumbing.NewHash(args[1].(string))
-	}
-	return
-}
-
-func (c *GitClient) getRemoteNameFromArgs(args ...interface{}) (remoteName string, err error) {
-	if len(args) < 1 {
-		return remoteName, ErrInvalidArgsLength
-	}
-	if args[0] == nil {
-		remoteName = GitRemoteNameOrigin
-	} else {
-		remoteName = args[0].(string)
-	}
-	return
-}
-
-func (c *GitClient) getResetModeFromArgs(args ...interface{}) (mode git.ResetMode, err error) {
-	if len(args) < 1 {
-		return mode, ErrInvalidArgsLength
-	}
-	if args[0] != nil {
-		mode, err = c.getResetMode(args[0])
-		if err != nil {
-			return mode, err
-		}
-	}
-	return
-}
-
-func (c *GitClient) getResetMode(mode interface{}) (res git.ResetMode, err error) {
-	switch mode.(type) {
-	case int8:
-		return git.ResetMode(int8(0)), nil
-	case git.ResetMode:
-		return mode.(git.ResetMode), err
-	}
-	return git.MixedReset, ErrUnsupportedType
+	return storage, fs
 }
 
 func (c *GitClient) getGitAuth() (auth transport.AuthMethod, err error) {
@@ -548,7 +490,7 @@ func (c *GitClient) getGitAuth() (auth transport.AuthMethod, err error) {
 			// read from private key file
 			privateKeyData, err = ioutil.ReadFile(c.privateKeyPath)
 			if err != nil {
-				return nil, err
+				return nil, trace.TraceError(err)
 			}
 		} else {
 			// no private key
@@ -561,7 +503,7 @@ func (c *GitClient) getGitAuth() (auth transport.AuthMethod, err error) {
 			signer, err = ssh.ParsePrivateKey(privateKeyData)
 		}
 		if err != nil {
-			return nil, err
+			return nil, trace.TraceError(err)
 		}
 		auth = &gitssh.PublicKeys{
 			User:   c.username,
@@ -572,7 +514,7 @@ func (c *GitClient) getGitAuth() (auth transport.AuthMethod, err error) {
 		}
 		return auth, nil
 	default:
-		return nil, ErrInvalidAuthType
+		return nil, trace.TraceError(ErrInvalidAuthType)
 	}
 }
 
