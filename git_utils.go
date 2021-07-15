@@ -3,6 +3,7 @@ package vcs
 import (
 	"github.com/go-git/go-git/v5"
 	"os"
+	"path"
 )
 
 func CreateBareGitRepo(path string) (err error) {
@@ -51,9 +52,16 @@ func CloneGitRepo(path, url string, opts ...GitCloneOption) (c *GitClient, err e
 	return NewGitClient(WithPath(path))
 }
 
-func IsGitRepoExists(path string) (ok bool) {
-	if _, err := git.PlainOpen(path); err != nil {
-		return false
+func IsGitRepoExists(repoPath string) (ok bool) {
+	dotGitPath := path.Join(repoPath, git.GitDirName)
+	if _, err := os.Stat(dotGitPath); err == nil {
+		return true
 	}
-	return true
+
+	headPath := path.Join(repoPath, "HEAD")
+	if _, err := os.Stat(headPath); err == nil {
+		return true
+	}
+
+	return false
 }
