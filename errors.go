@@ -11,4 +11,5 @@ var (
 	ErrInvalidRepoPath                 = errors.New("invalid repo path")
 	ErrUnableToGetCurrentBranch        = errors.New("unable to get current branch")
 	ErrUnableToCloneWithEmptyRemoteUrl = errors.New("unable to clone with empty remote url")
+	ErrInvalidHeadRef                  = errors.New("invalid head ref")
 )

@@ -15,7 +15,11 @@ import (
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"os"
+	"path"
+	"regexp"
 )
+
+var headRefRegexp, _ = regexp.Compile("^ref: (.*)")
 
 type GitClient struct {
 	// settings
@@ -327,6 +331,18 @@ func (c *GitClient) GetPrivateKeyPath() (path string) {
 }
 
 func (c *GitClient) GetCurrentBranch() (branch string, err error) {
+	// attempt to get branch from .git/HEAD
+	headRefStr, err := c.getHeadRef()
+	if err != nil {
+		return "", err
+	}
+
+	// if .git/HEAD points to refs/heads/master, return branch as master
+	if headRefStr == plumbing.Master.String() {
+		return GitBranchNameMaster, nil
+	}
+
+	// attempt to get head ref
 	headRef, err := c.r.Head()
 	if err != nil {
 		return "", trace.TraceError(err)
@@ -334,7 +350,22 @@ func (c *GitClient) GetCurrentBranch() (branch string, err error) {
 	if !headRef.Name().IsBranch() {
 		return "", trace.TraceError(ErrUnableToGetCurrentBranch)
 	}
+
 	return headRef.Name().String(), nil
+}
+
+func (c *GitClient) GetBranches() (branches []string, err error) {
+	iter, err := c.r.Branches()
+	if err != nil {
+		return nil, trace.TraceError(err)
+	}
+
+	_ = iter.ForEach(func(r *plumbing.Reference) error {
+		branches = append(branches, r.Name().String())
+		return nil
+	})
+
+	return branches, nil
 }
 
 func (c *GitClient) initMem() (err error) {
@@ -518,6 +549,26 @@ func (c *GitClient) getGitAuth() (auth transport.AuthMethod, err error) {
 	default:
 		return nil, trace.TraceError(ErrInvalidAuthType)
 	}
+}
+
+func (c *GitClient) getHeadRef() (ref string, err error) {
+	wt, err := c.r.Worktree()
+	if err != nil {
+		return "", trace.TraceError(err)
+	}
+	fh, err := wt.Filesystem.Open(path.Join(".git", "HEAD"))
+	if err != nil {
+		return "", trace.TraceError(err)
+	}
+	data, err := ioutil.ReadAll(fh)
+	if err != nil {
+		return "", trace.TraceError(err)
+	}
+	m := headRefRegexp.FindStringSubmatch(string(data))
+	if len(m) < 2 {
+		return "", trace.TraceError(ErrInvalidHeadRef)
+	}
+	return m[1], nil
 }
 
 func NewGitClient(opts ...GitOption) (c *GitClient, err error) {
