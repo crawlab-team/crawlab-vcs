@@ -8,12 +8,19 @@ type GitOptions struct {
 	checkout []GitCheckoutOption
 }
 
+type GitRef struct {
+	Type string `json:"type"`
+	Name string `json:"name"`
+	Hash string `json:"hash"`
+}
+
 type GitLog struct {
+	Hash        string    `json:"hash"`
 	Msg         string    `json:"msg"`
-	Branch      string    `json:"branch"`
 	AuthorName  string    `json:"author_name"`
 	AuthorEmail string    `json:"author_email"`
 	Timestamp   time.Time `json:"timestamp"`
+	Refs        []GitRef  `json:"refs"`
 }
 
 type GitFileStatus struct {

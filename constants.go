@@ -30,3 +30,8 @@ const (
 	GitInitTypeFs GitInitType = iota
 	GitInitTypeMem
 )
+
+const (
+	GitRefTypeBranch = "branch"
+	GitRefTypeTag    = "tag"
+)

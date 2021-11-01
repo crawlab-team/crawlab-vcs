@@ -290,8 +290,8 @@ func (c *GitClient) GetLogs() (logs []GitLog, err error) {
 	}
 	if err := iter.ForEach(func(commit *object.Commit) error {
 		log := GitLog{
-			Msg: commit.Message,
-			//Branch:    commit.Committer,
+			Hash:        commit.Hash.String(),
+			Msg:         commit.Message,
 			AuthorName:  commit.Author.Name,
 			AuthorEmail: commit.Author.Email,
 			Timestamp:   commit.Author.When,
@@ -304,6 +304,49 @@ func (c *GitClient) GetLogs() (logs []GitLog, err error) {
 	return
 }
 
+func (c *GitClient) GetLogsWithRefs() (logs []GitLog, err error) {
+	// logs without tags
+	logs, err = c.GetLogs()
+	if err != nil {
+		return nil, err
+	}
+
+	// branches
+	branches, err := c.GetBranches()
+	if err != nil {
+		return nil, err
+	}
+
+	// tags
+	tags, err := c.GetTags()
+	if err != nil {
+		return nil, err
+	}
+
+	// refs
+	refs := append(branches, tags...)
+
+	// refs map
+	refsMap := map[string][]GitRef{}
+	for _, ref := range refs {
+		_, ok := refsMap[ref.Hash]
+		if !ok {
+			refsMap[ref.Hash] = []GitRef{}
+		}
+		refsMap[ref.Hash] = append(refsMap[ref.Hash], ref)
+	}
+
+	// iterate logs
+	for i, l := range logs {
+		refs, ok := refsMap[l.Hash]
+		if ok {
+			logs[i].Refs = refs
+		}
+	}
+
+	return logs, nil
+}
+
 func (c *GitClient) GetRepository() (r *git.Repository) {
 	return c.r
 }
@@ -312,24 +355,64 @@ func (c *GitClient) GetPath() (path string) {
 	return c.path
 }
 
+func (c *GitClient) SetPath(path string) {
+	c.path = path
+}
+
 func (c *GitClient) GetRemoteUrl() (path string) {
 	return c.remoteUrl
+}
+
+func (c *GitClient) SetRemoteUrl(url string) {
+	c.remoteUrl = url
 }
 
 func (c *GitClient) GetIsMem() (isMem bool) {
 	return c.isMem
 }
 
+func (c *GitClient) SetIsMem(isMem bool) {
+	c.isMem = isMem
+}
+
 func (c *GitClient) GetAuthType() (authType GitAuthType) {
 	return c.authType
+}
+
+func (c *GitClient) SetAuthType(authType GitAuthType) {
+	c.authType = authType
 }
 
 func (c *GitClient) GetUsername() (username string) {
 	return c.username
 }
 
+func (c *GitClient) SetUsername(username string) {
+	c.username = username
+}
+
+func (c *GitClient) GetPassword() (password string) {
+	return c.password
+}
+
+func (c *GitClient) SetPassword(password string) {
+	c.password = password
+}
+
+func (c *GitClient) GetPrivateKey() (key string) {
+	return c.privateKey
+}
+
+func (c *GitClient) SetPrivateKey(key string) {
+	c.privateKey = key
+}
+
 func (c *GitClient) GetPrivateKeyPath() (path string) {
 	return c.privateKeyPath
+}
+
+func (c *GitClient) SetPrivateKeyPath(path string) {
+	c.privateKeyPath = path
 }
 
 func (c *GitClient) GetCurrentBranch() (branch string, err error) {
@@ -356,18 +439,40 @@ func (c *GitClient) GetCurrentBranch() (branch string, err error) {
 	return headRef.Name().String(), nil
 }
 
-func (c *GitClient) GetBranches() (branches []string, err error) {
+func (c *GitClient) GetBranches() (branches []GitRef, err error) {
 	iter, err := c.r.Branches()
 	if err != nil {
 		return nil, trace.TraceError(err)
 	}
 
 	_ = iter.ForEach(func(r *plumbing.Reference) error {
-		branches = append(branches, r.Name().String())
+		branches = append(branches, GitRef{
+			Type: GitRefTypeBranch,
+			Name: r.Name().Short(),
+			Hash: r.Hash().String(),
+		})
 		return nil
 	})
 
 	return branches, nil
+}
+
+func (c *GitClient) GetTags() (tags []GitRef, err error) {
+	iter, err := c.r.Tags()
+	if err != nil {
+		return nil, trace.TraceError(err)
+	}
+
+	_ = iter.ForEach(func(r *plumbing.Reference) error {
+		tags = append(tags, GitRef{
+			Type: GitRefTypeTag,
+			Name: r.Name().Short(),
+			Hash: r.Hash().String(),
+		})
+		return nil
+	})
+
+	return tags, nil
 }
 
 func (c *GitClient) GetStatus() (statusList []GitFileStatus, err error) {
