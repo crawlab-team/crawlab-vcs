@@ -17,6 +17,8 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"sort"
+	"strings"
 )
 
 var headRefRegexp, _ = regexp.Compile("^ref: (.*)")
@@ -97,7 +99,7 @@ func (c *GitClient) Checkout(opts ...GitCheckoutOption) (err error) {
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
-		return trace.TraceError(err)
+		return err
 	}
 
 	// apply options
@@ -108,7 +110,7 @@ func (c *GitClient) Checkout(opts ...GitCheckoutOption) (err error) {
 
 	// checkout to the branch
 	if err := wt.Checkout(o); err != nil {
-		return trace.TraceError(err)
+		return err
 	}
 
 	return nil
@@ -165,7 +167,7 @@ func (c *GitClient) Pull(opts ...GitPullOption) (err error) {
 		if err == git.NoErrAlreadyUpToDate {
 			return nil
 		}
-		return trace.TraceError(err)
+		return err
 	}
 
 	return nil
@@ -207,12 +209,12 @@ func (c *GitClient) Reset(opts ...GitResetOption) (err error) {
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
-		return trace.TraceError(err)
+		return err
 	}
 
 	// reset
 	if err := wt.Reset(o); err != nil {
-		return trace.TraceError(err)
+		return err
 	}
 
 	return nil
@@ -227,13 +229,13 @@ func (c *GitClient) CheckoutBranch(branch string, opts ...GitCheckoutOption) (er
 				Name: branch,
 			}
 			if err := c.r.CreateBranch(&cfg); err != nil {
-				return trace.TraceError(err)
+				return err
 			}
 
 			// HEAD reference
 			headRef, err := c.r.Head()
 			if err != nil {
-				return trace.TraceError(err)
+				return err
 			}
 
 			// branch reference name
@@ -244,10 +246,10 @@ func (c *GitClient) CheckoutBranch(branch string, opts ...GitCheckoutOption) (er
 
 			// set HEAD to branch reference
 			if err := c.r.Storer.SetReference(ref); err != nil {
-				return trace.TraceError(err)
+				return err
 			}
 		} else {
-			return trace.TraceError(err)
+			return err
 		}
 	}
 
@@ -366,6 +368,73 @@ func (c *GitClient) GetBranches() (branches []string, err error) {
 	})
 
 	return branches, nil
+}
+
+func (c *GitClient) GetStatus() (statusList []GitFileStatus, err error) {
+	// worktree
+	wt, err := c.r.Worktree()
+	if err != nil {
+		return nil, trace.TraceError(err)
+	}
+
+	// status
+	status, err := wt.Status()
+	if err != nil {
+		return nil, trace.TraceError(err)
+	}
+
+	// file status list
+	var list []GitFileStatus
+	for filePath, fileStatus := range status {
+		// file name
+		fileName := path.Base(filePath)
+
+		// file status
+		s := GitFileStatus{
+			Path:     filePath,
+			Name:     fileName,
+			IsDir:    false,
+			Staging:  c.getStatusString(fileStatus.Staging),
+			Worktree: c.getStatusString(fileStatus.Worktree),
+			Extra:    fileStatus.Extra,
+		}
+
+		// add to list
+		list = append(list, s)
+	}
+
+	// sort list ascending
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Path < list[j].Path
+	})
+
+	return list, nil
+}
+
+func (c *GitClient) Add(filePath string) (err error) {
+	// worktree
+	wt, err := c.r.Worktree()
+	if err != nil {
+		return trace.TraceError(err)
+	}
+
+	if _, err := wt.Add(filePath); err != nil {
+		return trace.TraceError(err)
+	}
+
+	return nil
+}
+
+func (c *GitClient) GetRemote(name string) (r *git.Remote, err error) {
+	return c.r.Remote(name)
+}
+
+func (c *GitClient) CreateRemote(cfg *config.RemoteConfig) (r *git.Remote, err error) {
+	return c.r.CreateRemote(cfg)
+}
+
+func (c *GitClient) DeleteRemote(name string) (err error) {
+	return c.r.DeleteRemote(name)
 }
 
 func (c *GitClient) initMem() (err error) {
@@ -569,6 +638,36 @@ func (c *GitClient) getHeadRef() (ref string, err error) {
 		return "", trace.TraceError(ErrInvalidHeadRef)
 	}
 	return m[1], nil
+}
+
+func (c *GitClient) getStatusString(statusCode git.StatusCode) (code string) {
+	return string(statusCode)
+	//switch statusCode {
+	//}
+	//Unmodified         StatusCode = ' '
+	//Untracked          StatusCode = '?'
+	//Modified           StatusCode = 'M'
+	//Added              StatusCode = 'A'
+	//Deleted            StatusCode = 'D'
+	//Renamed            StatusCode = 'R'
+	//Copied             StatusCode = 'C'
+	//UpdatedButUnmerged StatusCode = 'U'
+}
+
+func (c *GitClient) getDirPaths(filePath string) (paths []string) {
+	pathItems := strings.Split(filePath, "/")
+
+	var items []string
+	for i, pathItem := range pathItems {
+		if i == len(pathItems)-1 {
+			continue
+		}
+		items = append(items, pathItem)
+		dirPath := strings.Join(items, "/")
+		paths = append(paths, dirPath)
+	}
+
+	return paths
 }
 
 func NewGitClient(opts ...GitOption) (c *GitClient, err error) {
