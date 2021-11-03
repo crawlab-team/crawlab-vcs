@@ -9,9 +9,11 @@ type GitOptions struct {
 }
 
 type GitRef struct {
-	Type string `json:"type"`
-	Name string `json:"name"`
-	Hash string `json:"hash"`
+	Type      string    `json:"type"`
+	Name      string    `json:"name"`
+	FullName  string    `json:"full_name"`
+	Hash      string    `json:"hash"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 type GitLog struct {

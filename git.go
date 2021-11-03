@@ -217,40 +217,56 @@ func (c *GitClient) Reset(opts ...GitResetOption) (err error) {
 		return err
 	}
 
+	// clean
+	if err := wt.Clean(&git.CleanOptions{Dir: true}); err != nil {
+		return err
+	}
+
 	return nil
 }
 
+func (c *GitClient) CheckoutBranchFromRef(branch string, ref *plumbing.Reference, opts ...GitCheckoutOption) (err error) {
+	return c.CheckoutBranchWithRemote(branch, "", ref, opts...)
+}
+
+func (c *GitClient) CheckoutBranchWithRemoteFromRef(branch, remote string, ref *plumbing.Reference, opts ...GitCheckoutOption) (err error) {
+	return c.CheckoutBranchWithRemote(branch, remote, ref, opts...)
+}
+
 func (c *GitClient) CheckoutBranch(branch string, opts ...GitCheckoutOption) (err error) {
+	return c.CheckoutBranchWithRemote(branch, "", nil, opts...)
+}
+
+func (c *GitClient) CheckoutBranchWithRemote(branch, remote string, ref *plumbing.Reference, opts ...GitCheckoutOption) (err error) {
+	if remote == "" {
+		remote = GitRemoteNameOrigin
+	}
+
+	// remote
+	if _, err := c.r.Remote(remote); err != nil {
+		return trace.TraceError(err)
+	}
+
 	// check if the branch exists
-	if _, err := c.r.Branch(branch); err != nil {
+	b, err := c.r.Branch(branch)
+	if err != nil {
 		if err == git.ErrBranchNotFound {
 			// create a new branch if it does not exist
-			cfg := config.Branch{
-				Name: branch,
-			}
-			if err := c.r.CreateBranch(&cfg); err != nil {
+			if err := c.createBranch(branch, remote, ref); err != nil {
 				return err
 			}
-
-			// HEAD reference
-			headRef, err := c.r.Head()
+			b, err = c.r.Branch(branch)
 			if err != nil {
-				return err
-			}
-
-			// branch reference name
-			branchRefName := plumbing.NewBranchReferenceName(branch)
-
-			// branch reference
-			ref := plumbing.NewHashReference(branchRefName, headRef.Hash())
-
-			// set HEAD to branch reference
-			if err := c.r.Storer.SetReference(ref); err != nil {
 				return err
 			}
 		} else {
 			return err
 		}
+	}
+
+	// set branch remote
+	if remote != "" {
+		b.Remote = remote
 	}
 
 	// add to options
@@ -436,7 +452,7 @@ func (c *GitClient) GetCurrentBranch() (branch string, err error) {
 		return "", trace.TraceError(ErrUnableToGetCurrentBranch)
 	}
 
-	return headRef.Name().String(), nil
+	return headRef.Name().Short(), nil
 }
 
 func (c *GitClient) GetBranches() (branches []GitRef, err error) {
@@ -455,6 +471,75 @@ func (c *GitClient) GetBranches() (branches []GitRef, err error) {
 	})
 
 	return branches, nil
+}
+
+func (c *GitClient) GetRemoteRefs(remoteName string) (gitRefs []GitRef, err error) {
+	// remote
+	r, err := c.r.Remote(remoteName)
+	if err != nil {
+		return nil, trace.TraceError(err)
+	}
+
+	// auth
+	auth, err := c.getGitAuth()
+	if err != nil {
+		return nil, err
+	}
+
+	// refs
+	refs, err := r.List(&git.ListOptions{Auth: auth})
+	if err != nil {
+		return nil, trace.TraceError(err)
+	}
+
+	// iterate refs
+	for _, ref := range refs {
+		// ref type
+		var refType string
+		if strings.HasPrefix(ref.Name().String(), "refs/heads") {
+			refType = GitRefTypeBranch
+		} else if strings.HasPrefix(ref.Name().String(), "refs/tags") {
+			refType = GitRefTypeTag
+		} else {
+			continue
+		}
+
+		// add to branches
+		gitRefs = append(gitRefs, GitRef{
+			Type:     refType,
+			Name:     ref.Name().Short(),
+			FullName: ref.Name().String(),
+			Hash:     ref.Hash().String(),
+		})
+	}
+
+	// logs without tags
+	logs, err := c.GetLogs()
+	if err != nil {
+		return nil, err
+	}
+
+	// logs map
+	logsMap := map[string]GitLog{}
+	for _, l := range logs {
+		logsMap[l.Hash] = l
+	}
+
+	// iterate git refs
+	for i, gitRef := range gitRefs {
+		l, ok := logsMap[gitRef.Hash]
+		if !ok {
+			continue
+		}
+		gitRefs[i].Timestamp = l.Timestamp
+	}
+
+	// sort git refs
+	sort.Slice(gitRefs, func(i, j int) bool {
+		return gitRefs[i].Timestamp.Unix() > gitRefs[j].Timestamp.Unix()
+	})
+
+	return gitRefs, nil
 }
 
 func (c *GitClient) GetTags() (tags []GitRef, err error) {
@@ -773,6 +858,38 @@ func (c *GitClient) getDirPaths(filePath string) (paths []string) {
 	}
 
 	return paths
+}
+
+func (c *GitClient) createBranch(branch, remote string, ref *plumbing.Reference) (err error) {
+	// create a new branch if it does not exist
+	cfg := config.Branch{
+		Name:   branch,
+		Remote: remote,
+	}
+	if err := c.r.CreateBranch(&cfg); err != nil {
+		return err
+	}
+
+	// if ref is nil, set to HEAD
+	if ref == nil {
+		ref, err = c.r.Head()
+		if err != nil {
+			return err
+		}
+	}
+
+	// branch reference name
+	branchRefName := plumbing.NewBranchReferenceName(branch)
+
+	// branch reference
+	branchRef := plumbing.NewHashReference(branchRefName, ref.Hash())
+
+	// set HEAD to branch reference
+	if err := c.r.Storer.SetReference(branchRef); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func NewGitClient(opts ...GitOption) (c *GitClient, err error) {

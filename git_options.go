@@ -167,7 +167,7 @@ func WithRemoteNamePull(name string) GitPullOption {
 	}
 }
 
-func WithReferenceNamePull(branch string) GitPullOption {
+func WithBranchNamePull(branch string) GitPullOption {
 	return func(o *git.PullOptions) {
 		o.ReferenceName = plumbing.NewBranchReferenceName(branch)
 	}
