@@ -69,13 +69,13 @@ func (c *GitClient) Init() (err error) {
 				return err
 			}
 
-			// pull
-			opts := []GitPullOption{
-				WithRemoteNamePull(GitRemoteNameOrigin),
-			}
-			if err := c.Pull(opts...); err != nil {
-				return err
-			}
+			//// pull
+			//opts := []GitPullOption{
+			//	WithRemoteNamePull(GitRemoteNameOrigin),
+			//}
+			//if err := c.Pull(opts...); err != nil {
+			//	return err
+			//}
 		}
 	}
 
@@ -477,6 +477,9 @@ func (c *GitClient) GetRemoteRefs(remoteName string) (gitRefs []GitRef, err erro
 	// remote
 	r, err := c.r.Remote(remoteName)
 	if err != nil {
+		if err == git.ErrRemoteNotFound {
+			return nil, nil
+		}
 		return nil, trace.TraceError(err)
 	}
 
@@ -768,6 +771,9 @@ func (c *GitClient) getGitAuth() (auth transport.AuthMethod, err error) {
 	case GitAuthTypeNone:
 		return nil, nil
 	case GitAuthTypeHTTP:
+		if c.username == "" && c.password == "" {
+			return nil, nil
+		}
 		auth = &http.BasicAuth{
 			Username: c.username,
 			Password: c.password,
