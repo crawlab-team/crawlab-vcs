@@ -1,6 +1,7 @@
 package vcs
 
 import (
+	"github.com/apex/log"
 	"github.com/crawlab-team/go-trace"
 	"github.com/go-git/go-billy/v5"
 	"github.com/go-git/go-billy/v5/memfs"
@@ -573,7 +574,7 @@ func (c *GitClient) GetStatus() (statusList []GitFileStatus, err error) {
 	// status
 	status, err := wt.Status()
 	if err != nil {
-		return nil, trace.TraceError(err)
+		log.Warnf("failed to get worktree status: %v", err)
 	}
 
 	// file status list
