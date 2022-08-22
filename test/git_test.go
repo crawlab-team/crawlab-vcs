@@ -6,6 +6,7 @@ import (
 	"github.com/crawlab-team/crawlab-vcs"
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/stretchr/testify/require"
 	"io/ioutil"
@@ -151,6 +152,53 @@ func TestGitClient_InitWithHttpAuth(t *testing.T) {
 
 	// pull
 	err = c.Pull()
+	require.Nil(t, err)
+
+	// validate
+	files, err := ioutil.ReadDir(T.AuthRepoPath)
+	require.Greater(t, len(files), 0)
+	data, err = ioutil.ReadFile(path.Join(T.AuthRepoPath, "README.md"))
+	require.Nil(t, err)
+
+	// dispose
+	err = c.Dispose()
+	require.Nil(t, err)
+}
+
+func TestGitClient_PullWithHttpAuth(t *testing.T) {
+	var err error
+	T.Setup(t)
+
+	// get credentials
+	var cred Credential
+	data, err := ioutil.ReadFile("credentials.json")
+	require.Nil(t, err)
+	err = json.Unmarshal(data, &cred)
+	require.Nil(t, err)
+
+	// create new git client
+	c, err := vcs.NewGitClient(
+		vcs.WithPath(T.AuthRepoPath),
+		vcs.WithRemoteUrl(cred.TestRepoHttpUrl),
+		vcs.WithAuthType(vcs.GitAuthTypeHTTP),
+		vcs.WithUsername(cred.Username),
+		vcs.WithPassword(cred.Password),
+	)
+	require.Nil(t, err)
+
+	// create remote
+	r, err := c.CreateRemote(&config.RemoteConfig{
+		Name: vcs.GitRemoteNameUpstream,
+		URLs: []string{cred.TestRepoHttpUrl},
+	})
+	require.Nil(t, err)
+	require.NotNil(t, r)
+
+	// pull
+	err = c.Pull(
+		vcs.WithRemoteNamePull(vcs.GitRemoteNameUpstream),
+		vcs.WithBranchNamePull(vcs.GitBranchNameMain),
+	)
 	require.Nil(t, err)
 
 	// validate
