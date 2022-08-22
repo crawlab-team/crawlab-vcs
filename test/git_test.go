@@ -2,10 +2,10 @@ package test
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/crawlab-team/crawlab-vcs"
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/stretchr/testify/require"
 	"io/ioutil"
@@ -72,7 +72,7 @@ func TestGitClient_CommitAllAndCheckoutBranch(t *testing.T) {
 	// validate
 	branch, err := T.LocalRepo.GetCurrentBranch()
 	require.Nil(t, err)
-	require.Equal(t, plumbing.NewBranchReferenceName(T.TestBranchName).String(), branch)
+	require.Equal(t, T.TestBranchName, branch)
 }
 
 func TestGitClient_Push(t *testing.T) {
@@ -149,10 +149,18 @@ func TestGitClient_InitWithHttpAuth(t *testing.T) {
 	require.Equal(t, vcs.GitAuthTypeHTTP, c.GetAuthType())
 	require.Equal(t, cred.Username, c.GetUsername())
 
+	// pull
+	err = c.Pull()
+	require.Nil(t, err)
+
 	// validate
 	files, err := ioutil.ReadDir(T.AuthRepoPath)
 	require.Greater(t, len(files), 0)
 	data, err = ioutil.ReadFile(path.Join(T.AuthRepoPath, "README.md"))
+	require.Nil(t, err)
+
+	// dispose
+	err = c.Dispose()
 	require.Nil(t, err)
 }
 
@@ -166,25 +174,37 @@ func TestGitClient_InitWithSshAuth_PrivateKey(t *testing.T) {
 	require.Nil(t, err)
 	err = json.Unmarshal(data, &cred)
 	require.Nil(t, err)
+	fmt.Println(cred.SshUsername)
+	fmt.Println(cred.SshPassword)
+	fmt.Println(cred.TestRepoSshUrl)
 
 	// git client
 	c, err := vcs.NewGitClient(
 		vcs.WithPath(T.AuthRepoPath),
 		vcs.WithRemoteUrl(cred.TestRepoSshUrl),
 		vcs.WithAuthType(vcs.GitAuthTypeSSH),
-		vcs.WithUsername(cred.Username),
-		vcs.WithPassword(cred.Password),
+		vcs.WithUsername(cred.SshUsername),
+		vcs.WithPassword(cred.SshPassword),
 		vcs.WithPrivateKey(cred.PrivateKey),
 	)
 	require.Nil(t, err)
 	require.Equal(t, cred.TestRepoSshUrl, c.GetRemoteUrl())
 	require.Equal(t, vcs.GitAuthTypeSSH, c.GetAuthType())
-	require.Equal(t, cred.Username, c.GetUsername())
+	require.Equal(t, cred.SshUsername, c.GetUsername())
+	fmt.Println(c.GetAuthType())
+
+	// pull
+	err = c.Pull()
+	require.Nil(t, err)
 
 	// validate
 	files, err := ioutil.ReadDir(T.AuthRepoPath)
 	require.Greater(t, len(files), 0)
 	data, err = ioutil.ReadFile(path.Join(T.AuthRepoPath, "README.md"))
+	require.Nil(t, err)
+
+	// dispose
+	err = c.Dispose()
 	require.Nil(t, err)
 }
 
@@ -204,15 +224,19 @@ func TestGitClient_InitWithSshAuth_PrivateKeyPath(t *testing.T) {
 		vcs.WithPath(T.AuthRepoPath),
 		vcs.WithRemoteUrl(cred.TestRepoSshUrl),
 		vcs.WithAuthType(vcs.GitAuthTypeSSH),
-		vcs.WithUsername(cred.Username),
-		vcs.WithPassword(cred.Password),
+		vcs.WithUsername(cred.SshUsername),
+		vcs.WithPassword(cred.SshPassword),
 		vcs.WithPrivateKeyPath(cred.PrivateKeyPath),
 	)
 	require.Nil(t, err)
 	require.Equal(t, cred.TestRepoSshUrl, c.GetRemoteUrl())
 	require.Equal(t, vcs.GitAuthTypeSSH, c.GetAuthType())
-	require.Equal(t, cred.Username, c.GetUsername())
+	require.Equal(t, cred.SshUsername, c.GetUsername())
 	require.Equal(t, cred.PrivateKeyPath, c.GetPrivateKeyPath())
+
+	// pull
+	err = c.Pull()
+	require.Nil(t, err)
 
 	// validate
 	files, err := ioutil.ReadDir(T.AuthRepoPath)

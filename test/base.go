@@ -38,6 +38,7 @@ type Test struct {
 
 func (t *Test) Setup(t2 *testing.T) {
 	var err error
+	t2.Cleanup(t.Cleanup)
 
 	// remote repo
 	if err := vcs.CreateBareGitRepo(t.RemoteRepoPath); err != nil {
@@ -61,8 +62,6 @@ func (t *Test) Setup(t2 *testing.T) {
 	if err := t.LocalRepo.CommitAll(t.InitialCommitMessage); err != nil {
 		panic(err)
 	}
-
-	t2.Cleanup(t.Cleanup)
 }
 
 func (t *Test) Cleanup() {
