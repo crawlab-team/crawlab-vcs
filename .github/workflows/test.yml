@@ -11,7 +11,7 @@ jobs:
       - name: Setup Go environment
         uses: actions/setup-go@v2.1.3
         with:
-          go-version: 1.15
+          go-version: 1.16
 
       - name: Configure Git
         run: |
@@ -20,14 +20,10 @@ jobs:
 
       - name: Write Credentials
         run: |
-          echo "${{ secrets.CREDENTIAL_JSON }}" > $GITHUB_WORKSPACE/test/credentials.json
-          mkdir -p $GITHUB_WORKSPACE/test/.ssh
-          echo "${{ secrets.SSH_KEY }}" > $GITHUB_WORKSPACE/test/.ssh/id_rsa
-
-      - name: Validate Credentials
-        run: |
-          cat $GITHUB_WORKSPACE/test/credentials.json
-          cat $GITHUB_WORKSPACE/test/.ssh/id_rsa
+          echo "${{ secrets.CREDENTIAL_JSON }}" > $GITHUB_WORKSPACE/credentials.json
+          mkdir -p $GITHUB_WORKSPACE/.ssh
+          echo "${{ secrets.SSH_KEY }}" > $GITHUB_WORKSPACE/.ssh/id_rsa
+          sed $GITHUB_WORKSPACE/credentials.json -i -e "s/\/root/$GITHUB_WORKSPACE/g"
 
       - name: Run Tests
         run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic -coverpkg github.com/crawlab-team/crawlab-vcs
