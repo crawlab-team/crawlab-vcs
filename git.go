@@ -226,6 +226,10 @@ func (c *GitClient) Reset(opts ...GitResetOption) (err error) {
 	return nil
 }
 
+func (c *GitClient) CreateBranch(branch, remote string, ref *plumbing.Reference) (err error) {
+	return c.createBranch(branch, remote, ref)
+}
+
 func (c *GitClient) CheckoutBranchFromRef(branch string, ref *plumbing.Reference, opts ...GitCheckoutOption) (err error) {
 	return c.CheckoutBranchWithRemote(branch, "", ref, opts...)
 }
