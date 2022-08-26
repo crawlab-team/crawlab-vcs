@@ -34,6 +34,7 @@ type GitClient struct {
 	password       string
 	privateKey     string
 	privateKeyPath string
+	defaultBranch  string
 
 	// internals
 	r *git.Repository
@@ -100,7 +101,7 @@ func (c *GitClient) Checkout(opts ...GitCheckoutOption) (err error) {
 	// worktree
 	wt, err := c.r.Worktree()
 	if err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	// apply options
@@ -111,7 +112,7 @@ func (c *GitClient) Checkout(opts ...GitCheckoutOption) (err error) {
 
 	// checkout to the branch
 	if err := wt.Checkout(o); err != nil {
-		return err
+		return trace.TraceError(err)
 	}
 
 	return nil
@@ -262,10 +263,10 @@ func (c *GitClient) CheckoutBranchWithRemote(branch, remote string, ref *plumbin
 			}
 			b, err = c.r.Branch(branch)
 			if err != nil {
-				return err
+				return trace.TraceError(err)
 			}
 		} else {
-			return err
+			return trace.TraceError(err)
 		}
 	}
 
@@ -285,6 +286,27 @@ func (c *GitClient) CheckoutHash(hash string, opts ...GitCheckoutOption) (err er
 	opts = append(opts, WithHash(hash))
 
 	return c.Checkout(opts...)
+}
+
+func (c *GitClient) MoveBranch(from, to string) (err error) {
+	wt, err := c.r.Worktree()
+	if err != nil {
+		return trace.TraceError(err)
+	}
+	if err := wt.Checkout(&git.CheckoutOptions{
+		Create: true,
+		Branch: plumbing.NewBranchReferenceName(to),
+	}); err != nil {
+		return trace.TraceError(err)
+	}
+	fromRef, err := c.r.Reference(plumbing.NewBranchReferenceName(from), false)
+	if err != nil {
+		return trace.TraceError(err)
+	}
+	if err := c.r.Storer.RemoveReference(fromRef.Name()); err != nil {
+		return trace.TraceError(err)
+	}
+	return nil
 }
 
 func (c *GitClient) CommitAll(msg string, opts ...GitCommitOption) (err error) {

@@ -165,6 +165,45 @@ func TestGitClient_InitWithHttpAuth(t *testing.T) {
 	require.Nil(t, err)
 }
 
+func TestGitClient_MoveBranch(t *testing.T) {
+	var err error
+	T.Setup(t)
+
+	// get credentials
+	var cred Credential
+	data, err := ioutil.ReadFile("credentials.json")
+	require.Nil(t, err)
+	err = json.Unmarshal(data, &cred)
+	require.Nil(t, err)
+
+	// create new git client
+	c, err := vcs.NewGitClient(
+		vcs.WithPath(T.AuthRepoPath),
+		vcs.WithRemoteUrl(cred.TestRepoHttpUrl),
+		vcs.WithAuthType(vcs.GitAuthTypeHTTP),
+		vcs.WithUsername(cred.Username),
+		vcs.WithPassword(cred.Password),
+	)
+
+	// pull
+	err = c.Pull(vcs.WithBranchNamePull(vcs.GitBranchNameMain))
+	require.Nil(t, err)
+
+	// move branch
+	err = c.MoveBranch(vcs.GitBranchNameMaster, vcs.GitBranchNameMain)
+	require.Nil(t, err)
+
+	// validate
+	var branchNames []string
+	branches, err := c.GetBranches()
+	require.Nil(t, err)
+	for _, b := range branches {
+		branchNames = append(branchNames, b.Name)
+	}
+	require.Contains(t, branchNames, vcs.GitBranchNameMain)
+	require.NotContains(t, branchNames, vcs.GitBranchNameMaster)
+}
+
 func TestGitClient_PullWithHttpAuth(t *testing.T) {
 	var err error
 	T.Setup(t)

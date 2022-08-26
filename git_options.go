@@ -7,6 +7,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"golang.org/x/crypto/openpgp"
+	"strings"
 )
 
 type GitOption func(c *GitClient)
@@ -50,6 +51,12 @@ func WithPassword(password string) GitOption {
 func WithPrivateKey(key string) GitOption {
 	return func(c *GitClient) {
 		c.privateKey = key
+	}
+}
+
+func WithDefaultBranch(branch string) GitOption {
+	return func(c *GitClient) {
+		c.defaultBranch = branch
 	}
 }
 
@@ -113,7 +120,11 @@ type GitCheckoutOption func(o *git.CheckoutOptions)
 
 func WithBranch(branch string) GitCheckoutOption {
 	return func(o *git.CheckoutOptions) {
-		o.Branch = plumbing.NewBranchReferenceName(branch)
+		if strings.HasPrefix(branch, "refs/heads") {
+			o.Branch = plumbing.ReferenceName(branch)
+		} else {
+			o.Branch = plumbing.NewBranchReferenceName(branch)
+		}
 	}
 }
 
