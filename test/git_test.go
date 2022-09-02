@@ -74,6 +74,10 @@ func TestGitClient_CommitAllAndCheckoutBranch(t *testing.T) {
 	branch, err := T.LocalRepo.GetCurrentBranch()
 	require.Nil(t, err)
 	require.Equal(t, T.TestBranchName, branch)
+
+	// dispose
+	err = T.LocalRepo.Dispose()
+	require.Nil(t, err)
 }
 
 func TestGitClient_Push(t *testing.T) {
@@ -244,6 +248,59 @@ func TestGitClient_PullWithHttpAuth(t *testing.T) {
 	files, err := ioutil.ReadDir(T.AuthRepoPath)
 	require.Greater(t, len(files), 0)
 	data, err = ioutil.ReadFile(path.Join(T.AuthRepoPath, "README.md"))
+	require.Nil(t, err)
+
+	// dispose
+	err = c.Dispose()
+	require.Nil(t, err)
+}
+
+func TestGitClient_CheckoutRemoteBranchWithHttpAuth(t *testing.T) {
+	var err error
+	T.Setup(t)
+
+	// get credentials
+	var cred Credential
+	data, err := ioutil.ReadFile("credentials.json")
+	require.Nil(t, err)
+	err = json.Unmarshal(data, &cred)
+	require.Nil(t, err)
+
+	// create new git client
+	c, err := vcs.NewGitClient(
+		vcs.WithPath(T.AuthRepoPath),
+		vcs.WithRemoteUrl(cred.TestRepoMultiBranchUrl),
+		vcs.WithAuthType(vcs.GitAuthTypeHTTP),
+		vcs.WithUsername(cred.Username),
+		vcs.WithPassword(cred.Password),
+	)
+	require.Nil(t, err)
+
+	// pull
+	err = c.Pull(
+		vcs.WithRemoteNamePull(vcs.GitRemoteNameOrigin),
+		vcs.WithBranchNamePull(vcs.GitBranchNameMain),
+	)
+	require.Nil(t, err)
+
+	// validate
+	_, err = ioutil.ReadFile(path.Join(T.AuthRepoPath, "MAIN"))
+	require.Nil(t, err)
+
+	// checkout remote branch
+	err = c.CheckoutBranchWithRemote(vcs.GitBranchNameRelease, vcs.GitRemoteNameOrigin, nil)
+	require.Nil(t, err)
+
+	// validate
+	_, err = ioutil.ReadFile(path.Join(T.AuthRepoPath, "RELEASE"))
+	require.Nil(t, err)
+
+	// checkout remote branch
+	err = c.CheckoutBranchWithRemote(vcs.GitBranchNameDevelop, vcs.GitRemoteNameOrigin, nil)
+	require.Nil(t, err)
+
+	// validate
+	_, err = ioutil.ReadFile(path.Join(T.AuthRepoPath, "DEVELOP"))
 	require.Nil(t, err)
 
 	// dispose

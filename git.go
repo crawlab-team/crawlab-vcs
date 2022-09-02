@@ -519,7 +519,10 @@ func (c *GitClient) GetRemoteRefs(remoteName string) (gitRefs []GitRef, err erro
 	// refs
 	refs, err := r.List(&git.ListOptions{Auth: auth})
 	if err != nil {
-		return nil, trace.TraceError(err)
+		if err != transport.ErrEmptyRemoteRepository {
+			return nil, trace.TraceError(err)
+		}
+		return nil, nil
 	}
 
 	// iterate refs
@@ -902,12 +905,22 @@ func (c *GitClient) createBranch(branch, remote string, ref *plumbing.Reference)
 	if err := c.r.CreateBranch(&cfg); err != nil {
 		return err
 	}
-
-	// if ref is nil, set to HEAD
+	// if ref is nil
 	if ref == nil {
-		ref, err = c.r.Head()
+		// try to set to remote ref of branch first
+		ref, err = c.getBranchHashRef(branch, remote)
+
+		// if no matched remote branch, set to HEAD
+		if err == ErrNoMatchedRemoteBranch {
+			ref, err = c.r.Head()
+			if err != nil {
+				return trace.TraceError(err)
+			}
+		}
+
+		// error
 		if err != nil {
-			return err
+			return trace.TraceError(err)
 		}
 	}
 
@@ -923,6 +936,25 @@ func (c *GitClient) createBranch(branch, remote string, ref *plumbing.Reference)
 	}
 
 	return nil
+}
+
+func (c *GitClient) getBranchHashRef(branch, remote string) (hashRef *plumbing.Reference, err error) {
+	refs, err := c.GetRemoteRefs(remote)
+	if err != nil {
+		return nil, err
+	}
+	var branchRef *GitRef
+	for _, r := range refs {
+		if r.Name == branch {
+			branchRef = &r
+			break
+		}
+	}
+	if branchRef == nil {
+		return nil, ErrNoMatchedRemoteBranch
+	}
+	branchHashRef := plumbing.NewHashReference(plumbing.NewBranchReferenceName(branch), plumbing.NewHash(branchRef.Hash))
+	return branchHashRef, nil
 }
 
 func NewGitClient(opts ...GitOption) (c *GitClient, err error) {
