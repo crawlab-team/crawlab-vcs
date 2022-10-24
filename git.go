@@ -482,6 +482,23 @@ func (c *GitClient) GetCurrentBranch() (branch string, err error) {
 	return headRef.Name().Short(), nil
 }
 
+func (c *GitClient) GetCurrentBranchRef() (ref *GitRef, err error) {
+	currentBranch, err := c.GetCurrentBranch()
+	if err != nil {
+		return nil, err
+	}
+	branches, err := c.GetBranches()
+	if err != nil {
+		return nil, err
+	}
+	for _, branch := range branches {
+		if branch.Name == currentBranch {
+			return &branch, nil
+		}
+	}
+	return nil, trace.TraceError(ErrUnableToGetCurrentBranch)
+}
+
 func (c *GitClient) GetBranches() (branches []GitRef, err error) {
 	iter, err := c.r.Branches()
 	if err != nil {
@@ -658,6 +675,10 @@ func (c *GitClient) CreateRemote(cfg *config.RemoteConfig) (r *git.Remote, err e
 
 func (c *GitClient) DeleteRemote(name string) (err error) {
 	return c.r.DeleteRemote(name)
+}
+
+func (c *GitClient) IsRemoteChanged() (ok bool, err error) {
+	return c.isRemoteChanged()
 }
 
 func (c *GitClient) initMem() (err error) {
@@ -955,6 +976,23 @@ func (c *GitClient) getBranchHashRef(branch, remote string) (hashRef *plumbing.R
 	}
 	branchHashRef := plumbing.NewHashReference(plumbing.NewBranchReferenceName(branch), plumbing.NewHash(branchRef.Hash))
 	return branchHashRef, nil
+}
+
+func (c *GitClient) isRemoteChanged() (ok bool, err error) {
+	b, err := c.GetCurrentBranchRef()
+	if err != nil {
+		return false, err
+	}
+	refs, err := c.GetRemoteRefs(GitRemoteNameOrigin)
+	if err != nil {
+		return false, err
+	}
+	for _, r := range refs {
+		if r.Name == b.Name {
+			return r.Hash != b.Hash, nil
+		}
+	}
+	return false, nil
 }
 
 func NewGitClient(opts ...GitOption) (c *GitClient, err error) {
