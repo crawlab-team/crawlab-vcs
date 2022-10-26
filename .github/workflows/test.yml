@@ -24,7 +24,7 @@ jobs:
           echo '${{ secrets.CREDENTIAL_JSON }}' > $GITHUB_WORKSPACE/test/credentials.json
           ls -l $GITHUB_WORKSPACE/test
           mkdir -p $GITHUB_WORKSPACE/.ssh
-          echo "${{ secrets.SSH_KEY }}" > /root/.ssh/id_rsa
+          echo "${{ secrets.SSH_KEY }}" > ./id_rsa
 
       - name: Run Tests
         run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic -coverpkg github.com/crawlab-team/crawlab-vcs
