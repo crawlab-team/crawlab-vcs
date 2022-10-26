@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 )
 
 func TestNewGitClient_Existing(t *testing.T) {
@@ -440,5 +441,71 @@ func TestGitClient_Dispose_Mem(t *testing.T) {
 	_, ok = vcs.GitMemStorages.Load("./tmp/test_repo")
 	require.False(t, ok)
 	_, ok = vcs.GitMemFileSystem.Load("./tmp/test_repo")
+	require.False(t, ok)
+}
+
+func TestGitClient_IsRemoteChanged(t *testing.T) {
+	var err error
+	T.Setup(t)
+
+	// get credentials
+	var cred Credential
+	data, err := ioutil.ReadFile("credentials.json")
+	require.Nil(t, err)
+	err = json.Unmarshal(data, &cred)
+	require.Nil(t, err)
+
+	// git client
+	c1, err := vcs.NewGitClient(
+		vcs.WithPath(T.AuthRepoPath1),
+		vcs.WithRemoteUrl(cred.TestRepoSshUrl),
+		vcs.WithAuthType(vcs.GitAuthTypeSSH),
+		vcs.WithUsername(cred.SshUsername),
+		vcs.WithPassword(cred.SshPassword),
+		vcs.WithPrivateKeyPath(cred.PrivateKeyPath),
+	)
+	require.Nil(t, err)
+	err = c1.Pull()
+	require.Nil(t, err)
+	err = c1.CheckoutBranch("main")
+	require.Nil(t, err)
+
+	// git client (for validation)
+	c2, err := vcs.NewGitClient(
+		vcs.WithPath(T.AuthRepoPath2),
+		vcs.WithRemoteUrl(cred.TestRepoSshUrl),
+		vcs.WithAuthType(vcs.GitAuthTypeSSH),
+		vcs.WithUsername(cred.SshUsername),
+		vcs.WithPassword(cred.SshPassword),
+		vcs.WithPrivateKeyPath(cred.PrivateKeyPath),
+	)
+	require.Nil(t, err)
+	err = c2.Pull()
+	require.Nil(t, err)
+	err = c2.CheckoutBranch("main")
+	require.Nil(t, err)
+
+	// commit and push
+	testFileName := fmt.Sprintf("test-%d.txt", time.Now().Unix())
+	filePath := path.Join(c1.GetPath(), testFileName)
+	err = ioutil.WriteFile(filePath, []byte(T.TestFileContent), os.FileMode(0766))
+	require.Nil(t, err)
+	err = c1.Add(testFileName)
+	require.Nil(t, err)
+	err = c1.CommitAll(fmt.Sprintf("added %s", testFileName))
+	require.Nil(t, err)
+	err = c1.Push()
+	require.Nil(t, err)
+
+	// validate
+	ok, err := c2.IsRemoteChanged()
+	require.Nil(t, err)
+	require.True(t, ok)
+
+	// pull and validate
+	err = c2.Pull()
+	require.Nil(t, err)
+	ok, err = c2.IsRemoteChanged()
+	require.Nil(t, err)
 	require.False(t, ok)
 }

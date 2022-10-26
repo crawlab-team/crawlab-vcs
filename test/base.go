@@ -27,6 +27,9 @@ type Test struct {
 	FsRepoPath               string
 	MemRepoPath              string
 	AuthRepoPath             string
+	AuthRepoPath1            string
+	AuthRepoPath2            string
+	AuthRepoPath3            string
 	TestFileName             string
 	TestFileContent          string
 	TestBranchName           string
@@ -100,6 +103,15 @@ func NewTest() (t *Test, err error) {
 
 	// auth repo path
 	t.AuthRepoPath = "./tmp/test_auth_repo"
+
+	// auth repo path 1
+	t.AuthRepoPath1 = "./tmp/test_auth_repo1"
+
+	// auth repo path 2
+	t.AuthRepoPath2 = "./tmp/test_auth_repo2"
+
+	// auth repo path 3
+	t.AuthRepoPath3 = "./tmp/test_auth_repo3"
 
 	// test file name
 	t.TestFileName = "test_file.txt"
