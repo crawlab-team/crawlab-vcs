@@ -23,10 +23,6 @@ jobs:
           echo "${{ secrets.CREDENTIAL_JSON }}" > $GITHUB_WORKSPACE/credentials.json
           mkdir -p $GITHUB_WORKSPACE/.ssh
           echo "${{ secrets.SSH_KEY }}" > $GITHUB_WORKSPACE/.ssh/id_rsa
-          echo $GITHUB_WORKSPACE > github_workspace.txt
-          sed "s/\//\/\//g" github_workspace.txt > github_workspace.txt
-          GITHUB_WORKSPACE_VAR=$(cat github_workspace.txt)
-          sed "s/\/root/$GITHUB_WORKSPACE_VAR/g" $GITHUB_WORKSPACE/credentials.json > $GITHUB_WORKSPACE/credentials.json
 
       - name: Run Tests
         run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic -coverpkg github.com/crawlab-team/crawlab-vcs
