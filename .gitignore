@@ -19,3 +19,4 @@ tmp/
 test/credentials.json
 id_rsa*
 credentials.json
+coverage.txt
