@@ -23,6 +23,7 @@ jobs:
           echo "${{ secrets.CREDENTIAL_JSON }}" > $GITHUB_WORKSPACE/credentials.json
           mkdir -p $GITHUB_WORKSPACE/.ssh
           echo "${{ secrets.SSH_KEY }}" > $GITHUB_WORKSPACE/.ssh/id_rsa
+          echo $GITHUB_WORKSPACE
           sed "s/\/root/$GITHUB_WORKSPACE/g" $GITHUB_WORKSPACE/credentials.json > $GITHUB_WORKSPACE/credentials.json
 
       - name: Run Tests
