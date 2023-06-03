@@ -6,7 +6,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
-	"golang.org/x/crypto/openpgp"
 	"strings"
 )
 
@@ -161,12 +160,6 @@ func WithCommitter(committer *object.Signature) GitCommitOption {
 func WithParents(parents []plumbing.Hash) GitCommitOption {
 	return func(o *git.CommitOptions) {
 		o.Parents = parents
-	}
-}
-
-func WithSignKey(signKey *openpgp.Entity) GitCommitOption {
-	return func(o *git.CommitOptions) {
-		o.SignKey = signKey
 	}
 }
 
