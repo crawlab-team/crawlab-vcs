@@ -845,12 +845,7 @@ func (c *GitClient) getGitAuth() (auth transport.AuthMethod, err error) {
 			// no private key
 			return nil, nil
 		}
-		var signer ssh.Signer
-		if c.password != "" {
-			signer, err = ssh.ParsePrivateKeyWithPassphrase(privateKeyData, []byte(c.password))
-		} else {
-			signer, err = ssh.ParsePrivateKey(privateKeyData)
-		}
+		signer, err := ssh.ParsePrivateKey(privateKeyData)
 		if err != nil {
 			return nil, trace.TraceError(err)
 		}
