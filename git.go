@@ -169,6 +169,9 @@ func (c *GitClient) Pull(opts ...GitPullOption) (err error) {
 		if err == git.NoErrAlreadyUpToDate {
 			return nil
 		}
+		if err == git.ErrNonFastForwardUpdate {
+			return nil
+		}
 		return trace.TraceError(err)
 	}
 
