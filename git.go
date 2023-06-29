@@ -166,6 +166,9 @@ func (c *GitClient) Pull(opts ...GitPullOption) (err error) {
 		if err == transport.ErrEmptyRemoteRepository {
 			return nil
 		}
+		if err == transport.ErrEmptyUploadPackRequest {
+			return nil
+		}
 		if err == git.NoErrAlreadyUpToDate {
 			return nil
 		}
