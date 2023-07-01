@@ -28,9 +28,4 @@ jobs:
           ls -la $GITHUB_WORKSPACE
 
       - name: Run Tests
-        run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic -coverpkg github.com/crawlab-team/crawlab-vcs
-
-      - name: Codecov
-        uses: codecov/codecov-action@v1.5.0
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: go test ./... -race
