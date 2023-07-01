@@ -26,6 +26,7 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/.ssh
           echo "${{ secrets.SSH_KEY }}" > $GITHUB_WORKSPACE/id_rsa
           ls -la $GITHUB_WORKSPACE
+          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
 
       - name: Install
         run: go mod tidy
