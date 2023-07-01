@@ -24,7 +24,7 @@ jobs:
           echo '${{ secrets.CREDENTIAL_JSON }}' > $GITHUB_WORKSPACE/test/credentials.json
           ls -l $GITHUB_WORKSPACE/test
           mkdir -p $GITHUB_WORKSPACE/.ssh
-          echo "${{ secrets.SSH_KEY }}" > $GITHUB_WORKSPACE/id_rsa
+          echo "${{ secrets.SSH_KEY }}" > $GITHUB_WORKSPACE/.ssh/id_rsa
           ls -la $GITHUB_WORKSPACE
 
       - name: Install
