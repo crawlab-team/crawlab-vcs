@@ -28,4 +28,4 @@ jobs:
           ls -la $GITHUB_WORKSPACE
 
       - name: Run Tests
-        run: go test ./... -race
+        run: go mod install ./... && go test ./... -race
