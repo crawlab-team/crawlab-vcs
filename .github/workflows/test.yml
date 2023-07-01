@@ -1,4 +1,4 @@
-name: Test and coverage
+name: Test
 
 on: [ push, pull_request ]
 
@@ -26,6 +26,9 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/.ssh
           echo "${{ secrets.SSH_KEY }}" > $GITHUB_WORKSPACE/id_rsa
           ls -la $GITHUB_WORKSPACE
+
+      - name: Install
+        run: go mod tidy
 
       - name: Run Tests
         run: go test ./... -race
