@@ -353,42 +353,42 @@ func TestGitClient_InitWithSshAuth_PrivateKey(t *testing.T) {
 	require.Nil(t, err)
 }
 
-//func TestGitClient_InitWithSshAuth_PrivateKeyPath(t *testing.T) {
-//	var err error
-//	T.Setup(t)
-//
-//	// get credentials
-//	var cred Credential
-//	data, err := ioutil.ReadFile("credentials.json")
-//	require.Nil(t, err)
-//	err = json.Unmarshal(data, &cred)
-//	require.Nil(t, err)
-//
-//	// git client
-//	c, err := vcs.NewGitClient(
-//		vcs.WithPath(T.AuthRepoPath),
-//		vcs.WithRemoteUrl(cred.TestRepoSshUrl),
-//		vcs.WithAuthType(vcs.GitAuthTypeSSH),
-//		vcs.WithUsername(cred.SshUsername),
-//		vcs.WithPassword(cred.SshPassword),
-//		vcs.WithPrivateKeyPath(cred.PrivateKeyPath),
-//	)
-//	require.Nil(t, err)
-//	require.Equal(t, cred.TestRepoSshUrl, c.GetRemoteUrl())
-//	require.Equal(t, vcs.GitAuthTypeSSH, c.GetAuthType())
-//	require.Equal(t, cred.SshUsername, c.GetUsername())
-//	require.Equal(t, cred.PrivateKeyPath, c.GetPrivateKeyPath())
-//
-//	// pull
-//	err = c.Pull()
-//	require.Nil(t, err)
-//
-//	// validate
-//	files, err := ioutil.ReadDir(T.AuthRepoPath)
-//	require.Greater(t, len(files), 0)
-//	data, err = ioutil.ReadFile(path.Join(T.AuthRepoPath, "README.md"))
-//	require.Nil(t, err)
-//}
+func TestGitClient_InitWithSshAuth_PrivateKeyPath(t *testing.T) {
+	var err error
+	T.Setup(t)
+
+	// get credentials
+	var cred Credential
+	data, err := ioutil.ReadFile("credentials.json")
+	require.Nil(t, err)
+	err = json.Unmarshal(data, &cred)
+	require.Nil(t, err)
+
+	// git client
+	c, err := vcs.NewGitClient(
+		vcs.WithPath(T.AuthRepoPath),
+		vcs.WithRemoteUrl(cred.TestRepoSshUrl),
+		vcs.WithAuthType(vcs.GitAuthTypeSSH),
+		vcs.WithUsername(cred.SshUsername),
+		vcs.WithPassword(cred.SshPassword),
+		vcs.WithPrivateKeyPath(cred.PrivateKeyPath),
+	)
+	require.Nil(t, err)
+	require.Equal(t, cred.TestRepoSshUrl, c.GetRemoteUrl())
+	require.Equal(t, vcs.GitAuthTypeSSH, c.GetAuthType())
+	require.Equal(t, cred.SshUsername, c.GetUsername())
+	require.Equal(t, cred.PrivateKeyPath, c.GetPrivateKeyPath())
+
+	// pull
+	err = c.Pull()
+	require.Nil(t, err)
+
+	// validate
+	files, err := ioutil.ReadDir(T.AuthRepoPath)
+	require.Greater(t, len(files), 0)
+	data, err = ioutil.ReadFile(path.Join(T.AuthRepoPath, "README.md"))
+	require.Nil(t, err)
+}
 
 func TestGitClient_Dispose_Fs(t *testing.T) {
 	var err error
